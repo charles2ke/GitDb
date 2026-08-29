@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gitdb-py"
+version = "0.1.0"
+description = "Use a GitHub repository as a lightweight document database."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "GitDb contributors" }]
+keywords = ["github", "database", "json", "storage", "git"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Typing :: Typed",
+]
+dependencies = ["requests>=2.25"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "responses>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.5",
+    "types-requests",
+]
+
+[project.urls]
+Homepage = "https://github.com/charles2ke/GitDb"
+Source = "https://github.com/charles2ke/GitDb"
+Changelog = "https://github.com/charles2ke/GitDb/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gitdb"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+# Keep typing.List/Optional so runtime aliases stay valid on Python 3.9.
+ignore = ["UP006", "UP007", "UP035", "UP045"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gitdb", "tests"]
+
+[tool.mypy]
+files = ["src/gitdb"]
+strict = true
+warn_unused_ignores = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
