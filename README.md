@@ -92,19 +92,19 @@ Then open <http://127.0.0.1:8000> and sign in with the repository (`owner/name`)
 a GitHub token with **Contents: Read** permission, the branch to read (`main` by
 default) and the data root holding the collections (`data` by default).
 
-![GitDb Server sign-in form](docs/images/server-sign-in.png)
+![GitDb Server sign-in form](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-sign-in.png)
 
 The sidebar lists every collection under the data root; the derived `_index` and
 `_manifest` directories are hidden. Selecting one runs a query and renders the
 documents as a table, with `_id`, `_rev` and `_updated_at` first.
 
-![GitDb Server listing the documents of a collection](docs/images/server-browse.png)
+![GitDb Server listing the documents of a collection](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-browse.png)
 
 The query form filters by field value and caps how many documents come back
 (500 at most). Indexed fields are served from the index, any other field falls
 back to a client-side scan.
 
-![GitDb Server filtering a collection by field value](docs/images/server-query.png)
+![GitDb Server filtering a collection by field value](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-query.png)
 
 The token is exchanged for an opaque, `HttpOnly` session cookie and only ever
 lives in the server process memory: sessions are per process and are dropped on
