@@ -40,6 +40,7 @@ def load_example(name: str) -> ModuleType:
         "snapshots_history.py",
         "async_client.py",
         "webapp/app.py",
+        "server/main.py",
     ],
 )
 def test_examples_import_without_network(name: str, monkeypatch: pytest.MonkeyPatch) -> None:

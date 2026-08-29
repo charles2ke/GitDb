@@ -231,6 +231,32 @@ class GitDb:
             self._collections[name] = Collection(self, name)
         return self._collections[name]
 
+    def collections(self) -> List[str]:
+        """Return the sorted collection names stored under :attr:`root`.
+
+        Costs one request. Directories starting with ``_`` (the derived
+        ``_index`` and ``_manifest`` trees) are not collections and are skipped.
+        """
+        response = self.client.request(
+            "GET",
+            f"/repos/{self.repo}/contents/{self.root}".rstrip("/"),
+            params={"ref": self.read_ref},
+            allow_404=True,
+        )
+        if response.status_code == 404:
+            return []
+        entries = response.json()
+        if not isinstance(entries, list):
+            return []
+        return sorted(
+            str(entry["name"])
+            for entry in entries
+            if isinstance(entry, dict)
+            and entry.get("type") == "dir"
+            and "name" in entry
+            and not str(entry.get("name", "")).startswith("_")
+        )
+
     def collection_path(self, collection: str) -> str:
         return self.paths.collection_path(collection)
 

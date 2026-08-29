@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GitDb Server</title>
+    <style>
+      :root { color-scheme: light dark; --line: #d0d7de; --accent: #0969da; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
+      header { display: flex; align-items: center; gap: 1rem; padding: .75rem 1rem;
+               border-bottom: 1px solid var(--line); }
+      header h1 { font-size: 1rem; margin: 0; }
+      main { display: flex; min-height: calc(100vh - 3.25rem); }
+      nav { width: 15rem; border-right: 1px solid var(--line); padding: 1rem; }
+      nav button { display: block; width: 100%; text-align: left; margin-bottom: .25rem;
+                   padding: .35rem .5rem; border: 1px solid transparent; border-radius: 6px;
+                   background: none; cursor: pointer; font: inherit; }
+      nav button[aria-current="true"] { border-color: var(--accent); color: var(--accent); }
+      section { flex: 1; padding: 1rem; overflow: auto; }
+      form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; }
+      label { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; }
+      input { padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px;
+              font: inherit; min-width: 12rem; }
+      button.primary { padding: .4rem .9rem; border: 1px solid var(--accent); border-radius: 6px;
+                       background: var(--accent); color: #fff; cursor: pointer; font: inherit; }
+      table { border-collapse: collapse; margin-top: 1rem; width: 100%; }
+      th, td { border: 1px solid var(--line); padding: .35rem .5rem; text-align: left;
+               vertical-align: top; font-family: ui-monospace, monospace; font-size: .8rem; }
+      th { background: rgba(127, 127, 127, .12); }
+      .status { margin-top: .75rem; }
+      .error { color: #cf222e; }
+      .hidden { display: none !important; }
+      #login { max-width: 26rem; margin: 3rem auto; display: block; }
+      #login label { margin-bottom: .5rem; }
+      #login input { width: 100%; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>GitDb Server</h1>
+      <span id="connection"></span>
+      <button id="logout" class="primary hidden" type="button">Sign out</button>
+    </header>
+
+    <form id="login">
+      <label>Repository <input name="repo" placeholder="owner/name" required /></label>
+      <label>Token <input name="token" type="password" placeholder="github_pat_..." required /></label>
+      <label>Branch <input name="branch" value="main" /></label>
+      <label>Data root <input name="root" value="data" /></label>
+      <button class="primary" type="submit">Sign in</button>
+      <p id="login-status" class="status"></p>
+    </form>
+
+    <main id="workspace" class="hidden">
+      <nav>
+        <h2 style="font-size:.8rem">Tables</h2>
+        <div id="collections"></div>
+      </nav>
+      <section>
+        <form id="query">
+          <label>Table <input name="collection" required /></label>
+          <label>Field <input name="field" placeholder="(all documents)" /></label>
+          <label>Equals <input name="value" /></label>
+          <label>Limit <input name="limit" type="number" value="50" min="1" max="500" /></label>
+          <button class="primary" type="submit">Run query</button>
+        </form>
+        <p id="query-status" class="status"></p>
+        <table id="results"></table>
+      </section>
+    </main>
+
+    <script>
+      const $ = (selector) => document.querySelector(selector);
+
+      async function api(path, options) {
+        const response = await fetch(path, options);
+        if (response.status === 204) return null;
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.detail || response.statusText);
+        return payload;
+      }
+
+      function post(path, body) {
+        return api(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+
+      function say(element, message, isError) {
+        element.textContent = message;
+        element.classList.toggle("error", Boolean(isError));
+      }
+
+      function showCollections(names) {
+        const container = $("#collections");
+        container.replaceChildren();
+        if (!names.length) {
+          const empty = document.createElement("p");
+          empty.textContent = "No tables found under the data root.";
+          container.append(empty);
+          return;
+        }
+        for (const name of names) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = name;
+          button.addEventListener("click", () => {
+            $("#query").collection.value = name;
+            runQuery();
+          });
+          container.append(button);
+        }
+      }
+
+      function cell(tag, value) {
+        const element = document.createElement(tag);
+        element.textContent =
+          value === undefined ? "" : typeof value === "object" && value !== null
+            ? JSON.stringify(value)
+            : String(value);
+        return element;
+      }
+
+      function showResults(columns, documents) {
+        const table = $("#results");
+        table.replaceChildren();
+        if (!documents.length) return;
+        const head = document.createElement("tr");
+        for (const column of columns) head.append(cell("th", column));
+        table.append(head);
+        for (const document_ of documents) {
+          const row = document.createElement("tr");
+          for (const column of columns) row.append(cell("td", document_[column]));
+          table.append(row);
+        }
+      }
+
+      async function runQuery() {
+        const form = $("#query");
+        const status = $("#query-status");
+        say(status, "Running query...", false);
+        try {
+          const result = await post("/api/query", {
+            collection: form.collection.value.trim(),
+            field: form.field.value.trim(),
+            value: form.value.value,
+            limit: Number(form.limit.value),
+          });
+          showResults(result.columns, result.documents);
+          say(status, `${result.documents.length} document(s) in ${result.collection}.`, false);
+          for (const button of $("#collections").children) {
+            if (button.tagName === "BUTTON") {
+              button.setAttribute("aria-current", String(button.textContent === result.collection));
+            }
+          }
+        } catch (error) {
+          $("#results").replaceChildren();
+          say(status, error.message, true);
+        }
+      }
+
+      function connected(session) {
+        $("#connection").textContent = `${session.repo} @ ${session.branch}`;
+        $("#login").classList.add("hidden");
+        $("#workspace").classList.remove("hidden");
+        $("#logout").classList.remove("hidden");
+        showCollections(session.collections);
+      }
+
+      $("#login").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        say($("#login-status"), "Signing in...", false);
+        try {
+          const session = await post("/api/login", {
+            repo: form.repo.value.trim(),
+            token: form.token.value,
+            branch: form.branch.value.trim(),
+            root: form.root.value.trim(),
+          });
+          form.token.value = "";
+          say($("#login-status"), "", false);
+          connected(session);
+        } catch (error) {
+          say($("#login-status"), error.message, true);
+        }
+      });
+
+      $("#logout").addEventListener("click", async () => {
+        await post("/api/logout", {});
+        location.reload();
+      });
+
+      $("#query").addEventListener("submit", (event) => {
+        event.preventDefault();
+        runQuery();
+      });
+
+      api("/api/collections")
+        .then(connected)
+        .catch(() => {});
+    </script>
+  </body>
+</html>

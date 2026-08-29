@@ -260,3 +260,28 @@ def test_large_document_is_read_through_the_blob_api(db: GitDb) -> None:
     responses.add(responses.GET, contents_url("data/users/big.json"), json=payload, status=200)
     responses.add(responses.GET, blob_url("bigblob"), json={"_id": "big", "name": "huge"})
     assert db.collection("users").get("big") == {"_id": "big", "name": "huge"}
+
+
+@responses.activate
+def test_collections_lists_directories_under_the_root(db: GitDb) -> None:
+    responses.add(
+        responses.GET,
+        contents_url("data"),
+        json=[
+            {"name": "users", "type": "dir"},
+            {"name": "notes", "type": "dir"},
+            {"name": "_index", "type": "dir"},
+            {"name": "_manifest", "type": "dir"},
+            {"name": "README.md", "type": "file"},
+            {"type": "dir"},
+        ],
+        status=200,
+    )
+    assert db.collections() == ["notes", "users"]
+    assert responses.calls[0].request.params["ref"] == "main"
+
+
+@responses.activate
+def test_collections_is_empty_when_the_root_is_missing(db: GitDb) -> None:
+    responses.add(responses.GET, contents_url("data"), json={"message": "Not Found"}, status=404)
+    assert db.collections() == []

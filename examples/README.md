@@ -11,7 +11,7 @@ export GITDB_REPO=owner/scratch-repository
 
 Do not use a production repository: most examples write sample documents.
 Install optional asyncio dependencies with `pip install -r examples/requirements.txt`;
-the web service has its own requirements file.
+the web service and the server UI have their own requirements files.
 
 | Example | Description |
 | --- | --- |
@@ -24,6 +24,7 @@ the web service has its own requirements file.
 | [`snapshots_history.py`](snapshots_history.py) | Pinned reads, history, restore, and revert guidance. |
 | [`async_client.py`](async_client.py) | Bounded concurrent reads and an async batch write. |
 | [`webapp/`](webapp/) | FastAPI read/write notes REST service. |
+| [`server/`](server/) | GitDb Server: web UI to sign in, browse tables and query them. |
 
 Each script has its own usage header; run `python examples/<script>.py --help`
 for the command-line examples.
