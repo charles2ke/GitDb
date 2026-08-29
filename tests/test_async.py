@@ -382,6 +382,12 @@ async def test_batch_is_discarded_on_error(db: AsyncGitDb) -> None:
     assert len(respx.calls) == 0
 
 
+async def test_batch_put_increments_supplied_revision(db: AsyncGitDb) -> None:
+    batch = db.batch("m")
+    batch.put("users", "ada", {"_rev": 7, "name": "Ada"})
+    assert batch._puts[ADA]["_rev"] == 8
+
+
 @respx.mock
 async def test_batch_preconditions_block_stale_writes(db: AsyncGitDb) -> None:
     respx.get(f"{CONTENTS}/{ADA}").mock(

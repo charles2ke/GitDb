@@ -1177,7 +1177,7 @@ class AsyncBatch:
         validate_name(collection)
         validate_id(doc_id)
         path = self.db.document_path(collection, doc_id)
-        payload = with_metadata(doc_id, document)
+        payload = with_metadata(doc_id, document, document)
         self._puts[path] = payload
         self._collections.setdefault(collection, {})[doc_id] = payload
         if path in self._deletes:
