@@ -66,7 +66,7 @@ class Batch:
         """Queue a create-or-replace for ``collection/doc_id``."""
         validate_id(doc_id)
         path = self.db.document_path(collection, doc_id)
-        self._puts[path] = _Operation(collection, doc_id, with_metadata(doc_id, document))
+        self._puts[path] = _Operation(collection, doc_id, with_metadata(doc_id, document, document))
         self._deletes.pop(path, None)
         self._record(path, collection, doc_id, expected_sha, expected_rev, absent)
         return doc_id

@@ -90,6 +90,14 @@ def test_batch_put_supersedes_delete(db: GitDb) -> None:
     assert batch.operations == 1
 
 
+def test_batch_put_increments_supplied_revision(db: GitDb) -> None:
+    batch = db.batch("m")
+    batch.put("users", "1", {"_rev": 7, "name": "Ada"})
+    document = batch._puts["data/users/1.json"].document
+    assert document is not None
+    assert document["_rev"] == 8
+
+
 def test_batch_rejected_in_read_only_mode() -> None:
     db = GitDb(REPO, read_only=True)
     with pytest.raises(AuthError):
