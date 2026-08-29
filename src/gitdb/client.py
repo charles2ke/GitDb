@@ -253,6 +253,7 @@ class GitDb:
             for entry in entries
             if isinstance(entry, dict)
             and entry.get("type") == "dir"
+            and "name" in entry
             and not str(entry.get("name", "")).startswith("_")
         )
 

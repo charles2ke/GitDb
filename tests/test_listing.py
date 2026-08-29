@@ -273,6 +273,7 @@ def test_collections_lists_directories_under_the_root(db: GitDb) -> None:
             {"name": "_index", "type": "dir"},
             {"name": "_manifest", "type": "dir"},
             {"name": "README.md", "type": "file"},
+            {"type": "dir"},
         ],
         status=200,
     )
