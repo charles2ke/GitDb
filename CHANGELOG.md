@@ -6,6 +6,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Runnable sample clients for CRUD, bulk imports, indexes, CAS, snapshots,
+  async use, and a FastAPI service; see `examples/README.md`.
+
 ### Planned
 
 - Async `Writer`/`Transaction` twins.
