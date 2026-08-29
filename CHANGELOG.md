@@ -10,6 +10,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Runnable sample clients for CRUD, bulk imports, indexes, CAS, snapshots,
   async use, and a FastAPI service; see `examples/README.md`.
+- `GitDb.collections()` listing the collection names stored under `root`.
+- GitDb Server (`examples/server/`): a web UI that signs in to a repository,
+  lists its collections and queries them.
 
 ### Planned
 

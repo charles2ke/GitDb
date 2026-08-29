@@ -151,6 +151,7 @@ rejected.
 Methods:
 
 - `db.collection(name)` → `Collection`
+- `db.collections()` → sorted collection names stored under `root`
 - `db.batch(message=...)` → `Batch` (context manager)
 - `db.writer(max_operations=100, max_seconds=5.0)` → `Writer` coalescing writes
 - `db.transaction(message=...)` → `Transaction` over a temporary work branch
