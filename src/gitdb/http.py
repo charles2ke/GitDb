@@ -19,14 +19,28 @@ from .errors import (
 )
 from .ratelimit import RateLimit, RateLimiter
 
-__all__ = ["GitHubClient", "DEFAULT_API_URL", "DEFAULT_RAW_URL", "graphql_url_for"]
+__all__ = [
+    "GitHubClient",
+    "DEFAULT_API_URL",
+    "DEFAULT_RAW_URL",
+    "USER_AGENT",
+    "RETRY_STATUSES",
+    "backoff_seconds",
+    "default_headers",
+    "error_for",
+    "graphql_data",
+    "graphql_url_for",
+    "is_rate_limited",
+    "message_from",
+]
 
 DEFAULT_API_URL = "https://api.github.com"
 DEFAULT_RAW_URL = "https://raw.githubusercontent.com"
 USER_AGENT = "gitdb-py"
 
 #: Statuses that are safe to retry with exponential backoff.
-_RETRY_STATUSES = frozenset({500, 502, 503, 504})
+RETRY_STATUSES = frozenset({500, 502, 503, 504})
+_RETRY_STATUSES = RETRY_STATUSES
 
 #: 422 messages that describe a lost race rather than a malformed request.
 _CONFLICT_HINTS = ("sha", "exist", "conflict", "fast forward", "fast-forward")
@@ -38,6 +52,100 @@ def graphql_url_for(api_url: str) -> str:
     if base.endswith("/api/v3"):
         return base[: -len("/v3")] + "/graphql"
     return base + "/graphql"
+
+
+def default_headers(
+    token: Optional[str] = None,
+    extra: Optional[Mapping[str, Optional[str]]] = None,
+) -> Dict[str, str]:
+    """Return the headers every GitHub request carries."""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": USER_AGENT,
+    }
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    if extra:
+        headers.update({key: value for key, value in extra.items() if value is not None})
+    return headers
+
+
+def backoff_seconds(
+    attempt: int,
+    headers: Optional[Mapping[str, str]] = None,
+    *,
+    backoff_factor: float = 0.5,
+    max_backoff: float = 60.0,
+) -> float:
+    """Return how long to wait before retrying, honouring GitHub's own hints."""
+    retry_after: Optional[float] = None
+    if headers is not None:
+        raw = headers.get("Retry-After")
+        if raw:
+            try:
+                retry_after = float(raw)
+            except ValueError:
+                retry_after = None
+        if retry_after is None:
+            reset = headers.get("X-RateLimit-Reset")
+            if reset and headers.get("X-RateLimit-Remaining") == "0":
+                try:
+                    retry_after = max(0.0, float(reset) - time.time())
+                except ValueError:
+                    retry_after = None
+    if retry_after is None:
+        retry_after = backoff_factor * (2**attempt)
+    # Full jitter keeps concurrent clients from retrying in lockstep.
+    return min(max_backoff, retry_after + random.random() * backoff_factor)
+
+
+def is_rate_limited(status: int, headers: Mapping[str, str], text: str = "") -> bool:
+    """True when a 403/429 is GitHub throttling us rather than a real error."""
+    if status == 429:
+        return True
+    if status != 403:
+        return False
+    if headers.get("X-RateLimit-Remaining") == "0":
+        return True
+    if "Retry-After" in headers:
+        return True
+    return "rate limit" in (text or "").lower()
+
+
+def message_from(payload: Any, text: str = "") -> str:
+    """Extract GitHub's error message from a decoded body, falling back to text."""
+    if isinstance(payload, Mapping):
+        message = payload.get("message")
+        if isinstance(message, str):
+            return message
+    if payload is None:
+        return text
+    return str(payload)
+
+
+def error_for(status: int, message: str) -> GitDbError:
+    """Translate an HTTP status into the matching GitDb exception."""
+    if status in (401, 403):
+        return AuthError(f"authentication failed ({status}): {message}", status=status)
+    if status == 404:
+        return NotFoundError(f"not found: {message}", status=status)
+    if status == 409:
+        return ConflictError(f"conflict: {message}", status=status)
+    if status == 422:
+        lowered = message.lower()
+        if any(hint in lowered for hint in _CONFLICT_HINTS):
+            return ConflictError(f"conflict: {message}", status=status)
+        return ValidationError(f"invalid request: {message}", status=status)
+    return GitDbError(f"GitHub API error {status}: {message}", status=status)
+
+
+def graphql_data(payload: Any) -> Any:
+    """Return the ``data`` member of a GraphQL reply, raising on ``errors``."""
+    errors = payload.get("errors") if isinstance(payload, Mapping) else None
+    if errors:
+        raise graphql_error(errors)
+    return payload.get("data") if isinstance(payload, Mapping) else None
 
 
 class GitHubClient:
@@ -89,50 +197,20 @@ class GitHubClient:
 
     # ------------------------------------------------------------------ utils
     def _headers(self, extra: Optional[Mapping[str, str]] = None) -> Dict[str, str]:
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": USER_AGENT,
-        }
-        if self.token:
-            headers["Authorization"] = "Bearer " + self.token
-        if extra:
-            headers.update({key: value for key, value in extra.items() if value is not None})
-        return headers
+        return default_headers(self.token, extra)
 
     def _sleep_for(self, attempt: int, response: Optional[requests.Response]) -> float:
         """Return the number of seconds to wait before the next attempt."""
-        retry_after = None
-        if response is not None:
-            raw = response.headers.get("Retry-After")
-            if raw:
-                try:
-                    retry_after = float(raw)
-                except ValueError:
-                    retry_after = None
-            if retry_after is None:
-                reset = response.headers.get("X-RateLimit-Reset")
-                if reset and response.headers.get("X-RateLimit-Remaining") == "0":
-                    try:
-                        retry_after = max(0.0, float(reset) - time.time())
-                    except ValueError:
-                        retry_after = None
-        if retry_after is None:
-            retry_after = self.backoff_factor * (2**attempt)
-        # Full jitter keeps concurrent clients from retrying in lockstep.
-        return min(self.max_backoff, retry_after + random.random() * self.backoff_factor)
+        return backoff_seconds(
+            attempt,
+            response.headers if response is not None else None,
+            backoff_factor=self.backoff_factor,
+            max_backoff=self.max_backoff,
+        )
 
     @staticmethod
     def _is_rate_limited(response: requests.Response) -> bool:
-        if response.status_code == 429:
-            return True
-        if response.status_code != 403:
-            return False
-        if response.headers.get("X-RateLimit-Remaining") == "0":
-            return True
-        if "Retry-After" in response.headers:
-            return True
-        return "rate limit" in (response.text or "").lower()
+        return is_rate_limited(response.status_code, response.headers, response.text or "")
 
     @staticmethod
     def _message(response: requests.Response) -> str:
@@ -140,11 +218,7 @@ class GitHubClient:
             payload = response.json()
         except ValueError:
             return response.text or response.reason or ""
-        if isinstance(payload, dict):
-            message = payload.get("message")
-            if isinstance(message, str):
-                return message
-        return str(payload)
+        return message_from(payload, response.text or response.reason or "")
 
     # ------------------------------------------------------------- rate limit
     @property
@@ -236,20 +310,7 @@ class GitHubClient:
         )
 
     def _error_for(self, response: requests.Response) -> GitDbError:
-        status = response.status_code
-        message = self._message(response)
-        if status in (401, 403):
-            return AuthError(f"authentication failed ({status}): {message}", status=status)
-        if status == 404:
-            return NotFoundError(f"not found: {message}", status=status)
-        if status == 409:
-            return ConflictError(f"conflict: {message}", status=status)
-        if status == 422:
-            lowered = message.lower()
-            if any(hint in lowered for hint in _CONFLICT_HINTS):
-                return ConflictError(f"conflict: {message}", status=status)
-            return ValidationError(f"invalid request: {message}", status=status)
-        return GitDbError(f"GitHub API error {status}: {message}", status=status)
+        return error_for(response.status_code, self._message(response))
 
     # ------------------------------------------------------------- convenience
     def get_json(self, path: str, **kwargs: Any) -> Any:
@@ -264,11 +325,7 @@ class GitHubClient:
             self.graphql_url,
             json={"query": query, "variables": dict(variables or {})},
         )
-        payload = response.json()
-        errors = payload.get("errors") if isinstance(payload, dict) else None
-        if errors:
-            raise graphql_error(errors)
-        return payload.get("data") if isinstance(payload, dict) else None
+        return graphql_data(response.json())
 
     def close(self) -> None:
         self.session.close()
