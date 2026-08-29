@@ -10,6 +10,8 @@ uvicorn examples.server.main:app --reload
 
 Then open <http://127.0.0.1:8000> and sign in with:
 
+![GitDb Server sign-in form](../../docs/images/server-sign-in.png)
+
 | Field | Meaning |
 | --- | --- |
 | Repository | `owner/name` of the backing repository. |
@@ -21,6 +23,10 @@ The sidebar lists every collection under the data root (the derived `_index`
 and `_manifest` directories are hidden). Selecting one runs a query; the form
 also filters by field value — indexed fields use the index, everything else
 falls back to a client-side scan — and caps the number of returned documents.
+
+![GitDb Server listing the documents of a collection](../../docs/images/server-browse.png)
+
+![GitDb Server filtering a collection by field value](../../docs/images/server-query.png)
 
 The token is exchanged for an opaque, `HttpOnly` session cookie and is kept in
 the server process memory only. Sessions are per process and are dropped on

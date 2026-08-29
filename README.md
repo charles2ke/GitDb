@@ -76,6 +76,43 @@ A runnable script lives in [`examples/quickstart.py`](examples/quickstart.py).
 For complete client applications (CLI, bulk import, indexed queries, snapshots,
 async, and a small web service), see the [examples guide](examples/README.md).
 
+## GitDb Server
+
+[`examples/server/`](examples/server/) ships **GitDb Server**, a small FastAPI
+application that puts a browser UI in front of a GitDb repository: sign in with
+a repository and token, browse the collections ("tables") it contains, and
+query them.
+
+```bash
+pip install -r examples/server/requirements.txt
+uvicorn examples.server.main:app --reload
+```
+
+Then open <http://127.0.0.1:8000> and sign in with the repository (`owner/name`),
+a GitHub token with **Contents: Read** permission, the branch to read (`main` by
+default) and the data root holding the collections (`data` by default).
+
+![GitDb Server sign-in form](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-sign-in.png)
+
+The sidebar lists every collection under the data root; the derived `_index` and
+`_manifest` directories are hidden. Selecting one runs a query and renders the
+documents as a table, with `_id`, `_rev` and `_updated_at` first.
+
+![GitDb Server listing the documents of a collection](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-browse.png)
+
+The query form filters by field value and caps how many documents come back
+(500 at most). Indexed fields are served from the index, any other field falls
+back to a client-side scan.
+
+![GitDb Server filtering a collection by field value](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-query.png)
+
+The token is exchanged for an opaque, `HttpOnly` session cookie and only ever
+lives in the server process memory: sessions are per process and are dropped on
+sign-out or restart. Run it locally next to the browser that uses it rather than
+exposing it to a network. Besides the UI it exposes `POST /api/login`,
+`GET /api/collections`, `POST /api/query` and `POST /api/logout`; see the
+[server README](examples/server/README.md) for the payloads.
+
 ## Storage layout
 
 Documents are JSON files:
