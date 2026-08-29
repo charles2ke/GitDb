@@ -61,7 +61,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         if not args.dry_run:
             with db.batch(message=f"import {args.collection} chunk {number}") as batch:
                 for document in chunk:
-                    batch.put(args.collection, document.get("_id") or str(imported), document)
+                    raw_id = document.get("_id")
+                    doc_id = str(raw_id) if raw_id is not None and raw_id != "" else str(imported)
+                    batch.put(args.collection, doc_id, document)
                     imported += 1
         else:
             imported += len(chunk)

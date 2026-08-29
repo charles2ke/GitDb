@@ -68,7 +68,7 @@ def test_crud_cli_insert_uses_public_collection_api(
     )
     monkeypatch.setattr(module, "document_argument", lambda value: {"name": "Ada"})
     module.main(["users", "insert", "--json", "-"])
-    assert len(capsys.readouterr().out.strip()) == 26
+    assert re.fullmatch(r"[0-9A-HJKMNP-TV-Z]+", capsys.readouterr().out.strip())
 
 
 def test_bulk_import_dry_run_validates_records(

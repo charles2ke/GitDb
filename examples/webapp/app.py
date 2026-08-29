@@ -9,7 +9,8 @@ snapshot; POST and DELETE requests write to the configured scratch repository.
 from __future__ import annotations
 
 import os
-from typing import Any, Mapping, Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException
 
@@ -24,18 +25,30 @@ def make_db() -> GitDb:
 
 
 def create_app(db: Optional[GitDb] = None) -> FastAPI:
-    app = FastAPI(title="GitDb notes")
-    database = db or make_db()
-    notes = database.collection("notes")
+    database = db
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        nonlocal database
+        if database is None:
+            database = make_db()
+        yield
+
+    app = FastAPI(title="GitDb notes", lifespan=lifespan)
+
+    def configured_db() -> GitDb:
+        if database is None:
+            raise RuntimeError("application has not started")
+        return database
 
     @app.get("/notes")
     def list_notes() -> list[Mapping[str, Any]]:
-        snapshot = database.snapshot()
+        snapshot = configured_db().snapshot()
         return list(snapshot.collection("notes").all())
 
     @app.get("/notes/{note_id}")
     def get_note(note_id: str) -> Mapping[str, Any]:
-        snapshot = database.snapshot()
+        snapshot = configured_db().snapshot()
         document = snapshot.collection("notes").get(note_id)
         if document is None:
             raise HTTPException(status_code=404, detail="note not found")
@@ -43,16 +56,16 @@ def create_app(db: Optional[GitDb] = None) -> FastAPI:
 
     @app.post("/notes/{note_id}", status_code=201)
     def put_note(note_id: str, document: Mapping[str, Any]) -> Mapping[str, Any]:
-        return notes.upsert(note_id, document)
+        return configured_db().collection("notes").upsert(note_id, document)
 
     @app.delete("/notes/{note_id}", status_code=204)
     def delete_note(note_id: str) -> None:
         try:
-            notes.delete(note_id)
+            configured_db().collection("notes").delete(note_id)
         except NotFoundError as exc:
             raise HTTPException(status_code=404, detail="note not found") from exc
 
     return app
 
 
-app = create_app() if os.environ.get("GITHUB_TOKEN") and os.environ.get("GITDB_REPO") else FastAPI()
+app = create_app()
