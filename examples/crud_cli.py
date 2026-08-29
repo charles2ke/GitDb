@@ -20,7 +20,11 @@ from gitdb import GitDb
 def document_argument(value: str) -> Mapping[str, Any]:
     """Read a JSON object from a file, or stdin when value is ``-``."""
     try:
-        contents = sys.stdin.read() if value == "-" else open(value, encoding="utf-8").read()
+        if value == "-":
+            contents = sys.stdin.read()
+        else:
+            with open(value, encoding="utf-8") as file:
+                contents = file.read()
         document = json.loads(contents)
     except (OSError, json.JSONDecodeError) as exc:
         raise argparse.ArgumentTypeError(f"cannot read JSON: {exc}") from exc
