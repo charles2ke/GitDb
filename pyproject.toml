@@ -27,6 +27,11 @@ dependencies = ["requests>=2.25"]
 
 [project.optional-dependencies]
 async = ["httpx>=0.24"]
+examples = [
+    "httpx>=0.24",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
 dev = [
     "pytest>=7",
     "responses>=0.23",
@@ -36,6 +41,7 @@ dev = [
     "httpx>=0.24",
     "respx>=0.20",
     "pytest-asyncio>=0.21",
+    "fastapi>=0.115",
 ]
 
 [project.urls]
@@ -49,7 +55,7 @@ packages = ["src/gitdb"]
 [tool.ruff]
 line-length = 100
 target-version = "py39"
-src = ["src", "tests"]
+src = ["src", "tests", "examples"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
@@ -60,9 +66,13 @@ ignore = ["UP006", "UP007", "UP035", "UP045"]
 known-first-party = ["gitdb", "tests"]
 
 [tool.mypy]
-files = ["src/gitdb"]
+files = ["src/gitdb", "examples"]
 strict = true
 warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+module = ["fastapi"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

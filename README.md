@@ -73,6 +73,8 @@ async with AsyncGitDb(repo="owner/name", token=token, concurrency=8) as db:
 ```
 
 A runnable script lives in [`examples/quickstart.py`](examples/quickstart.py).
+For complete client applications (CLI, bulk import, indexed queries, snapshots,
+async, and a small web service), see the [examples guide](examples/README.md).
 
 ## Storage layout
 
