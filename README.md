@@ -78,10 +78,19 @@ async, and a small web service), see the [examples guide](examples/README.md).
 
 ## GitDb Server
 
-[`examples/server/`](examples/server/) ships **GitDb Server**, a small FastAPI
-application that puts a browser UI in front of a GitDb repository: sign in with
+**GitDb Server** puts a browser UI in front of a GitDb repository: sign in with
 a repository and token, browse the collections ("tables") it contains, and
-query them.
+query them. It is published to GitHub Pages at
+**<https://charles2ke.github.io/GitDb/>** and there is nothing to install: the
+page is static and talks to the GitHub REST API from your browser. The token is
+kept in memory for the tab only — it is never stored and never sent anywhere but
+`api.github.com` — and a token is only needed for private repositories. The
+source lives in [`site/`](site/) and is deployed by
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) (enable Pages with
+the *GitHub Actions* source once, under **Settings → Pages**).
+
+[`examples/server/`](examples/server/) ships the same UI as a small FastAPI
+application, for running it locally against a repository:
 
 ```bash
 pip install -r examples/server/requirements.txt
@@ -111,7 +120,9 @@ lives in the server process memory: sessions are per process and are dropped on
 sign-out or restart. Run it locally next to the browser that uses it rather than
 exposing it to a network. Besides the UI it exposes `POST /api/login`,
 `GET /api/collections`, `POST /api/query` and `POST /api/logout`; see the
-[server README](examples/server/README.md) for the payloads.
+[server README](examples/server/README.md) for the payloads. The hosted build has
+no backend and therefore no HTTP API: it performs the same reads directly against
+the GitHub REST API.
 
 ## Storage layout
 

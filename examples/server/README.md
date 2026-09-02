@@ -3,6 +3,11 @@
 A small web UI for a GitDb repository: sign in with a repository and token,
 browse the collections ("tables") it contains, and query them.
 
+A backend-free build of this UI is published to GitHub Pages at
+<https://charles2ke.github.io/GitDb/> (source in [`site/`](../../site/)); use it
+if you just want to browse a repository. Run the FastAPI version below when you
+want the HTTP API or want the token to stay on a server you control.
+
 ```bash
 pip install -r examples/server/requirements.txt
 uvicorn examples.server.main:app --reload
