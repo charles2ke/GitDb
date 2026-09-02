@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GitDb Server</title>
+    <meta
+      name="description"
+      content="Browse and query a GitDb repository straight from the browser."
+    />
+    <style>
+      :root { color-scheme: light dark; --line: #d0d7de; --accent: #0969da; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
+      header { display: flex; align-items: center; gap: 1rem; padding: .75rem 1rem;
+               border-bottom: 1px solid var(--line); }
+      header h1 { font-size: 1rem; margin: 0; }
+      main { display: flex; min-height: calc(100vh - 3.25rem); }
+      nav { width: 15rem; border-right: 1px solid var(--line); padding: 1rem; }
+      nav button { display: block; width: 100%; text-align: left; margin-bottom: .25rem;
+                   padding: .35rem .5rem; border: 1px solid transparent; border-radius: 6px;
+                   background: none; cursor: pointer; font: inherit; }
+      nav button[aria-current="true"] { border-color: var(--accent); color: var(--accent); }
+      section { flex: 1; padding: 1rem; overflow: auto; }
+      form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; }
+      label { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; }
+      input { padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px;
+              font: inherit; min-width: 12rem; }
+      button.primary { padding: .4rem .9rem; border: 1px solid var(--accent); border-radius: 6px;
+                       background: var(--accent); color: #fff; cursor: pointer; font: inherit; }
+      table { border-collapse: collapse; margin-top: 1rem; width: 100%; }
+      th, td { border: 1px solid var(--line); padding: .35rem .5rem; text-align: left;
+               vertical-align: top; font-family: ui-monospace, monospace; font-size: .8rem; }
+      th { background: rgba(127, 127, 127, .12); }
+      .status { margin-top: .75rem; }
+      .error { color: #cf222e; }
+      .hidden { display: none !important; }
+      #login { max-width: 26rem; margin: 3rem auto; display: block; }
+      #login label { margin-bottom: .5rem; }
+      #login input { width: 100%; }
+      #login p.note { font-size: .8rem; color: #57606a; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>GitDb Server</h1>
+      <span id="connection"></span>
+      <button id="logout" class="primary hidden" type="button">Sign out</button>
+    </header>
+
+    <form id="login">
+      <label>Repository <input name="repo" placeholder="owner/name" required /></label>
+      <label>Token <input name="token" type="password" placeholder="github_pat_... (optional for public repositories)" /></label>
+      <label>Branch <input name="branch" value="main" /></label>
+      <label>Data root <input name="root" value="data" /></label>
+      <button class="primary" type="submit">Sign in</button>
+      <p id="login-status" class="status"></p>
+      <p class="note">
+        This page runs entirely in your browser and talks to the GitHub REST API
+        directly. The token is kept in memory for this tab only: it is never
+        stored and never sent anywhere but github.com.
+      </p>
+    </form>
+
+    <main id="workspace" class="hidden">
+      <nav>
+        <h2 style="font-size:.8rem">Tables</h2>
+        <div id="collections"></div>
+      </nav>
+      <section>
+        <form id="query">
+          <label>Table <input name="collection" required /></label>
+          <label>Field <input name="field" placeholder="(all documents)" /></label>
+          <label>Equals <input name="value" /></label>
+          <label>Limit <input name="limit" type="number" value="50" min="1" max="500" /></label>
+          <button class="primary" type="submit">Run query</button>
+        </form>
+        <p id="query-status" class="status"></p>
+        <table id="results"></table>
+      </section>
+    </main>
+
+    <script>
+      const $ = (selector) => document.querySelector(selector);
+
+      /** Upper bound for the number of documents one query may return. */
+      const MAX_LIMIT = 500;
+
+      /** Number of document files fetched in parallel. */
+      const CONCURRENCY = 8;
+
+      /** Directories holding derived files rather than collections. */
+      const DERIVED = ["_index", "_manifest"];
+
+      /** The signed-in session; credentials never leave this object. */
+      let session = null;
+
+      class GitHubError extends Error {
+        constructor(message, status) {
+          super(message);
+          this.status = status;
+        }
+      }
+
+      async function github(path, { raw = false, allow404 = false } = {}) {
+        const headers = {
+          Accept: raw ? "application/vnd.github.raw" : "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        };
+        if (session.token) headers.Authorization = "Bearer " + session.token;
+        const response = await fetch(`https://api.github.com${path}`, { headers });
+        if (response.status === 404 && allow404) return null;
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          const detail = payload.message || response.statusText;
+          throw new GitHubError(
+            response.status === 401 || response.status === 403
+              ? `${detail} (check the token and its Contents: Read permission)`
+              : detail,
+            response.status,
+          );
+        }
+        return raw ? response.text() : response.json();
+      }
+
+      function joinPath(...parts) {
+        return parts.filter(Boolean).join("/");
+      }
+
+      function contentsPath(path) {
+        const encoded = path.split("/").map(encodeURIComponent).join("/");
+        return `/repos/${session.repo}/contents/${encoded}?ref=${encodeURIComponent(session.branch)}`;
+      }
+
+      /** List one repository directory, returning [] when it does not exist. */
+      async function listDirectory(path) {
+        const entries = await github(contentsPath(path), { allow404: true });
+        return Array.isArray(entries) ? entries : [];
+      }
+
+      /** Collection names under the data root, skipping the derived trees. */
+      async function listCollections() {
+        const entries = await listDirectory(session.root);
+        return entries
+          .filter((entry) => entry.type === "dir" && !entry.name.startsWith("_"))
+          .map((entry) => entry.name)
+          .sort();
+      }
+
+      /**
+       * The documents of a collection as {id, path} pairs, in id order.
+       *
+       * Sharded collections keep documents in nested directories, so walk the
+       * tree instead of listing a single directory.
+       */
+      async function listEntries(collection) {
+        const found = [];
+        const pending = [joinPath(session.root, collection)];
+        while (pending.length) {
+          const entries = await listDirectory(pending.shift());
+          for (const entry of entries) {
+            if (entry.type === "dir") pending.push(entry.path);
+            else if (entry.type === "file" && entry.name.endsWith(".json")) {
+              found.push({ id: entry.name.slice(0, -5), path: entry.path });
+            }
+          }
+        }
+        return found.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+      }
+
+      async function readDocument(path) {
+        const raw = await github(contentsPath(path), { raw: true, allow404: true });
+        return raw === null ? null : JSON.parse(raw);
+      }
+
+      /** Fetch documents by path, a few at a time so one query is not a burst. */
+      async function readDocuments(entries) {
+        const documents = new Array(entries.length).fill(null);
+        let next = 0;
+        const workers = Array.from({ length: Math.min(CONCURRENCY, entries.length) }, async () => {
+          while (next < entries.length) {
+            const position = next++;
+            documents[position] = await readDocument(entries[position].path);
+          }
+        });
+        await Promise.all(workers);
+        return documents.filter((document_) => document_ !== null);
+      }
+
+      /** The index key of a value: strings verbatim, everything else as JSON. */
+      function indexKey(value) {
+        return typeof value === "string" ? value : JSON.stringify(value);
+      }
+
+      function matches(document_, field, value) {
+        const stored = document_[field];
+        if (stored === undefined) return false;
+        const candidates = Array.isArray(stored) ? stored : [stored];
+        return candidates.some((item) => indexKey(item) === value);
+      }
+
+      /**
+       * Look documents up by field value, using the secondary index when the
+       * collection has one and falling back to a scan otherwise.
+       */
+      async function findBy(collection, field, value, limit) {
+        const path = joinPath(session.root, "_index", collection, `${field}.json`);
+        const index = await github(contentsPath(path), { raw: true, allow404: true });
+        const entries = await listEntries(collection);
+        if (index !== null) {
+          const values = JSON.parse(index).values || {};
+          const wanted = new Set((values[value] || []).slice(0, limit));
+          return readDocuments(entries.filter((entry) => wanted.has(entry.id)));
+        }
+        const documents = await readDocuments(entries);
+        return documents.filter((document_) => matches(document_, field, value)).slice(0, limit);
+      }
+
+      /** Union of the document keys, metadata columns first. */
+      function columnsOf(documents) {
+        const seen = [];
+        for (const document_ of documents) {
+          for (const key of Object.keys(document_)) if (!seen.includes(key)) seen.push(key);
+        }
+        const leading = ["_id", "_rev", "_updated_at"].filter((key) => seen.includes(key));
+        return leading.concat(seen.filter((key) => !leading.includes(key)));
+      }
+
+      function say(element, message, isError) {
+        element.textContent = message;
+        element.classList.toggle("error", Boolean(isError));
+      }
+
+      function showCollections(names) {
+        const container = $("#collections");
+        container.replaceChildren();
+        if (!names.length) {
+          const empty = document.createElement("p");
+          empty.textContent = "No tables found under the data root.";
+          container.append(empty);
+          return;
+        }
+        for (const name of names) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = name;
+          button.addEventListener("click", () => {
+            $("#query").collection.value = name;
+            runQuery();
+          });
+          container.append(button);
+        }
+      }
+
+      function cell(tag, value) {
+        const element = document.createElement(tag);
+        element.textContent =
+          value === undefined ? "" : typeof value === "object" && value !== null
+            ? JSON.stringify(value)
+            : String(value);
+        return element;
+      }
+
+      function showResults(columns, documents) {
+        const table = $("#results");
+        table.replaceChildren();
+        if (!documents.length) return;
+        const head = document.createElement("tr");
+        for (const column of columns) head.append(cell("th", column));
+        table.append(head);
+        for (const document_ of documents) {
+          const row = document.createElement("tr");
+          for (const column of columns) row.append(cell("td", document_[column]));
+          table.append(row);
+        }
+      }
+
+      function boundedLimit(raw) {
+        const limit = Number(raw);
+        return Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), MAX_LIMIT)) : 50;
+      }
+
+      async function runQuery() {
+        const form = $("#query");
+        const status = $("#query-status");
+        const collection = form.collection.value.trim();
+        const field = form.field.value.trim();
+        const limit = boundedLimit(form.limit.value);
+        if (!collection) return;
+        say(status, "Running query...", false);
+        try {
+          const documents = field
+            ? await findBy(collection, field, form.value.value, limit)
+            : await readDocuments((await listEntries(collection)).slice(0, limit));
+          showResults(columnsOf(documents), documents);
+          say(status, `${documents.length} document(s) in ${collection}.`, false);
+          for (const button of $("#collections").children) {
+            if (button.tagName === "BUTTON") {
+              button.setAttribute("aria-current", String(button.textContent === collection));
+            }
+          }
+        } catch (error) {
+          $("#results").replaceChildren();
+          say(status, error.message, true);
+        }
+      }
+
+      function connected(collections) {
+        $("#connection").textContent = `${session.repo} @ ${session.branch}`;
+        $("#login").classList.add("hidden");
+        $("#workspace").classList.remove("hidden");
+        $("#logout").classList.remove("hidden");
+        showCollections(collections);
+      }
+
+      $("#login").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const repo = form.repo.value.trim();
+        if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) {
+          say($("#login-status"), "repository must look like owner/name", true);
+          return;
+        }
+        session = {
+          repo,
+          token: form.token.value,
+          branch: form.branch.value.trim() || "main",
+          root: form.root.value.trim().replace(/^\/+|\/+$/g, "") || "data",
+        };
+        say($("#login-status"), "Signing in...", false);
+        try {
+          const collections = await listCollections();
+          form.token.value = "";
+          say($("#login-status"), "", false);
+          connected(collections);
+        } catch (error) {
+          session = null;
+          say($("#login-status"), error.message, true);
+        }
+      });
+
+      $("#logout").addEventListener("click", () => {
+        session = null;
+        location.reload();
+      });
+
+      $("#query").addEventListener("submit", (event) => {
+        event.preventDefault();
+        runQuery();
+      });
+    </script>
+  </body>
+</html>
