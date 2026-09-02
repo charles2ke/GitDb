@@ -142,7 +142,7 @@
       async function listCollections() {
         const entries = await listDirectory(session.root);
         return entries
-          .filter((entry) => entry.type === "dir" && !entry.name.startsWith("_"))
+          .filter((entry) => entry.type === "dir" && !DERIVED.includes(entry.name))
           .map((entry) => entry.name)
           .sort();
       }
@@ -156,8 +156,9 @@
       async function listEntries(collection) {
         const found = [];
         const pending = [joinPath(session.root, collection)];
-        while (pending.length) {
-          const entries = await listDirectory(pending.shift());
+        let cursor = 0;
+        while (cursor < pending.length) {
+          const entries = await listDirectory(pending[cursor++]);
           for (const entry of entries) {
             if (entry.type === "dir") pending.push(entry.path);
             else if (entry.type === "file" && entry.name.endsWith(".json")) {
