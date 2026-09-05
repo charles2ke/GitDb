@@ -9,6 +9,7 @@ Everything in this module is pure, which lets the sync and async clients share i
 from __future__ import annotations
 
 import json
+from bisect import bisect_left
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -103,8 +104,9 @@ def empty_index(collection: str, field: str) -> Document:
 def _index_parts(index: Mapping[str, Any]) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
     values = index.get("values")
     ids = index.get("ids")
+    # Buckets are kept sorted so ids can be inserted and removed with a binary search.
     values = (
-        {str(key): list(item) for key, item in values.items()} if isinstance(values, dict) else {}
+        {str(key): sorted(item) for key, item in values.items()} if isinstance(values, dict) else {}
     )
     ids = {str(key): list(item) for key, item in ids.items()} if isinstance(ids, dict) else {}
     return values, ids
@@ -120,10 +122,13 @@ def apply_index(
     values, ids = _index_parts(index)
     for doc_id, document in changes.items():
         for stale in ids.pop(doc_id, []):
-            remaining = [known for known in values.get(stale, []) if known != doc_id]
-            if remaining:
-                values[stale] = remaining
-            else:
+            bucket = values.get(stale)
+            if bucket is None:
+                continue
+            position = bisect_left(bucket, doc_id)
+            if position < len(bucket) and bucket[position] == doc_id:
+                del bucket[position]
+            if not bucket:
                 values.pop(stale, None)
         if document is None:
             continue
@@ -133,9 +138,10 @@ def apply_index(
         ids[doc_id] = keys
         for key in keys:
             bucket = values.setdefault(key, [])
-            if doc_id not in bucket:
-                bucket.append(doc_id)
-                bucket.sort()
+            # Buckets stay sorted, so a binary search finds the insertion point.
+            position = bisect_left(bucket, doc_id)
+            if position == len(bucket) or bucket[position] != doc_id:
+                bucket.insert(position, doc_id)
     return {
         "_index": field,
         "collection": collection,
@@ -156,8 +162,13 @@ def build_index(
 
 def lookup_index(index: Mapping[str, Any], value: Any) -> List[str]:
     """Return the document ids stored for ``value``."""
-    values, _ = _index_parts(index)
-    return list(values.get(index_key(value), []))
+    values = index.get("values")
+    if not isinstance(values, Mapping):
+        return []
+    bucket = values.get(index_key(value))
+    if not isinstance(bucket, Iterable) or isinstance(bucket, (str, bytes)):
+        return []
+    return [str(doc_id) for doc_id in bucket]
 
 
 def empty_manifest(collection: str) -> Document:

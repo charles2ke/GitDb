@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from bisect import bisect_right
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from types import TracebackType
@@ -61,6 +62,9 @@ CONTENTS_MAX_BYTES = 900_000
 
 #: How many document paths to request per GraphQL round trip.
 GRAPHQL_BATCH_SIZE = 50
+
+#: How many documents a scan fetches at a time, so a bounded scan can stop early.
+SCAN_CHUNK = 100
 
 
 class TreeEntry(NamedTuple):
@@ -1211,7 +1215,7 @@ class Collection:
         """
         ids = self._ids()
         if after is not None:
-            ids = [doc_id for doc_id in ids if doc_id > after]
+            ids = ids[bisect_right(ids, after) :]
         return ids[:limit] if limit is not None else ids
 
     def _ids(self) -> List[str]:
@@ -1219,11 +1223,11 @@ class Collection:
             manifest, _ = self.db._read(self.db.manifest_path(self.name))
             if manifest is not None:
                 return sorted(manifest_ids(manifest))
-        return [
+        return sorted(
             doc_id
             for doc_id in (GitDb.id_from_path(path) for path in self.db._list_paths(self.path))
             if doc_id is not None
-        ]
+        )
 
     def _entries_for(self, ids: Sequence[str]) -> List[TreeEntry]:
         entries: List[TreeEntry] = []
@@ -1246,8 +1250,14 @@ class Collection:
         *,
         after: Optional[str] = None,
     ) -> Iterator[Document]:
-        """Yield every document in the collection, in id order."""
-        yield from self._documents_for(self.list(limit=limit, after=after))
+        """Yield every document in the collection, in id order.
+
+        Documents are fetched in chunks, so a consumer that stops early (for
+        example :meth:`find` with a ``limit``) never pays for the rest.
+        """
+        ids = self.list(limit=limit, after=after)
+        for start in range(0, len(ids), SCAN_CHUNK):
+            yield from self._documents_for(ids[start : start + SCAN_CHUNK])
 
     def page(self, limit: int = 100, *, after: Optional[str] = None) -> Page:
         """Return one page of documents plus the cursor for the next page."""
