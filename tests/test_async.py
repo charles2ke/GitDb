@@ -9,6 +9,7 @@ import pytest
 
 from gitdb import AuthError, ConflictError, NotFoundError, ValidationError
 from gitdb.aio import AsyncGitDb
+from gitdb.client import SCAN_CHUNK
 from tests.conftest import API, RAW, REPO, contents_payload, decode, encode, tree_url
 
 httpx = pytest.importorskip("httpx")
@@ -226,6 +227,23 @@ async def test_find_count_and_pages(db: AsyncGitDb) -> None:
     assert first.cursor == "b"
     seen = [page async for page in users.pages(2)]
     assert [[doc["_id"] for doc in page] for page in seen] == [["a", "b"], ["c"]]
+
+
+@respx.mock
+async def test_find_with_limit_stops_after_first_blob_chunk(db: AsyncGitDb) -> None:
+    register_documents(
+        respx,
+        {
+            f"doc{index:03d}": {"_id": f"doc{index:03d}", "match": True}
+            for index in range(SCAN_CHUNK + 1)
+        },
+    )
+
+    matches = await db.collection("users").find(lambda doc: doc["match"], limit=1)
+
+    assert [doc["_id"] for doc in matches] == ["doc000"]
+    blob_reads = [call for call in respx.calls if "/git/blobs/" in str(call.request.url)]
+    assert len(blob_reads) == SCAN_CHUNK
 
 
 @respx.mock
