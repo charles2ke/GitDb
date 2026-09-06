@@ -9,7 +9,7 @@ Everything in this module is pure, which lets the sync and async clients share i
 from __future__ import annotations
 
 import json
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -125,9 +125,10 @@ def apply_index(
             bucket = values.get(stale)
             if bucket is None:
                 continue
-            position = bisect_left(bucket, doc_id)
-            if position < len(bucket) and bucket[position] == doc_id:
-                del bucket[position]
+            start = bisect_left(bucket, doc_id)
+            end = bisect_right(bucket, doc_id)
+            if start != end:
+                del bucket[start:end]
             if not bucket:
                 values.pop(stale, None)
         if document is None:
