@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 import responses
 
 from gitdb import GitDb
+from gitdb.client import SCAN_CHUNK
 from tests.conftest import (
     API,
     REPO,
@@ -167,6 +168,22 @@ def test_find_and_count(db: GitDb) -> None:
     matches = users.find(lambda doc: doc["name"].startswith("A"))
     assert [doc["_id"] for doc in matches] == ["ada"]
     assert len(users) == 2
+
+
+@responses.activate
+def test_find_with_limit_stops_after_first_blob_chunk(db: GitDb) -> None:
+    register_documents(
+        {
+            f"doc{index:03d}": {"_id": f"doc{index:03d}", "match": True}
+            for index in range(SCAN_CHUNK + 1)
+        }
+    )
+
+    matches = db.collection("users").find(lambda doc: doc["match"], limit=1)
+
+    assert [doc["_id"] for doc in matches] == ["doc000"]
+    blob_reads = [call for call in responses.calls if "/git/blobs/" in call.request.url]
+    assert len(blob_reads) == SCAN_CHUNK
 
 
 @responses.activate

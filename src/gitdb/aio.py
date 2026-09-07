@@ -14,6 +14,7 @@ Requires the ``async`` extra::
 from __future__ import annotations
 
 import asyncio
+from bisect import bisect_right
 from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
@@ -24,6 +25,7 @@ from .cache import Cache, CacheEntry, MemoryCache, NullCache
 from .client import (
     CONTENTS_MAX_BYTES,
     GRAPHQL_BATCH_SIZE,
+    SCAN_CHUNK,
     CommitResult,
     Page,
     TreeEntry,
@@ -1045,7 +1047,7 @@ class AsyncCollection:
         """Return the sorted ids stored in this collection."""
         ids = await self._ids()
         if after is not None:
-            ids = [doc_id for doc_id in ids if doc_id > after]
+            ids = ids[bisect_right(ids, after) :]
         return ids[:limit] if limit is not None else ids
 
     async def _ids(self) -> List[str]:
@@ -1053,13 +1055,13 @@ class AsyncCollection:
             manifest, _ = await self.db._read(self.db.manifest_path(self.name))
             if manifest is not None:
                 return sorted(manifest_ids(manifest))
-        return [
+        return sorted(
             doc_id
             for doc_id in (
                 AsyncGitDb.id_from_path(path) for path in await self.db._list_paths(self.path)
             )
             if doc_id is not None
-        ]
+        )
 
     def _entries_for(self, ids: Sequence[str]) -> List[TreeEntry]:
         entries: List[TreeEntry] = []
@@ -1107,13 +1109,19 @@ class AsyncCollection:
         limit: Optional[int] = None,
         after: Optional[str] = None,
     ) -> List[Document]:
-        """Client-side filter over every document in the collection."""
+        """Client-side filter over every document in the collection.
+
+        Documents are fetched in chunks, so a bounded search stops as soon as
+        enough matches are found instead of downloading the whole collection.
+        """
         matches: List[Document] = []
-        for document in await self.all(after=after):
-            if predicate(document):
-                matches.append(document)
-                if limit is not None and len(matches) >= limit:
-                    break
+        ids = await self.list(after=after)
+        for start in range(0, len(ids), SCAN_CHUNK):
+            for document in await self._documents_for(ids[start : start + SCAN_CHUNK]):
+                if predicate(document):
+                    matches.append(document)
+                    if limit is not None and len(matches) >= limit:
+                        return matches
         return matches
 
     async def find_by(

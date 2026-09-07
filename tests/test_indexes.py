@@ -72,6 +72,20 @@ def test_apply_index_adds_moves_and_deletes() -> None:
     assert index["values"] == {}
 
 
+def test_apply_index_removes_duplicate_stale_ids() -> None:
+    index = {
+        "_index": "email",
+        "collection": "users",
+        "values": {"a@x": ["ada", "ada", "bob"]},
+        "ids": {"ada": ["a@x"], "bob": ["a@x"]},
+    }
+
+    index = apply_index(index, "users", "email", {"ada": {"email": "b@x"}})
+
+    assert lookup_index(index, "a@x") == ["bob"]
+    assert lookup_index(index, "b@x") == ["ada"]
+
+
 def test_build_index_groups_documents_by_value() -> None:
     index = build_index(
         "users",
