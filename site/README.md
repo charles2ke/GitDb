@@ -6,6 +6,16 @@ step, no dependencies and no backend.
 
 ![GitDb Server on GitHub Pages listing a collection](../docs/images/pages-browse.png)
 
+The page is responsive, so the same build works on a phone: the table list
+becomes a row of chips, the query fields stack full width with touch-sized
+controls, and the results table scrolls sideways.
+
+<p>
+  <img width="240" alt="Sign-in form on a phone" src="../docs/images/mobile-sign-in.png" />
+  <img width="240" alt="Browsing a collection on a phone" src="../docs/images/mobile-browse.png" />
+  <img width="240" alt="Filtering a collection on a phone" src="../docs/images/mobile-query.png" />
+</p>
+
 Because GitHub Pages only serves static files, this build does the work the
 FastAPI example does server-side in the browser instead. It reads the same
 repository layout through the GitHub REST API:
