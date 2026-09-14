@@ -33,6 +33,16 @@ falls back to a client-side scan — and caps the number of returned documents.
 
 ![GitDb Server filtering a collection by field value](../../docs/images/server-query.png)
 
+The layout adapts to narrow screens: the sidebar turns into a row of table
+chips, the query fields stack full width with touch-sized controls, and the
+results table scrolls sideways.
+
+<p>
+  <img width="240" alt="Sign-in form on a phone" src="../../docs/images/mobile-sign-in.png" />
+  <img width="240" alt="Browsing a collection on a phone" src="../../docs/images/mobile-browse.png" />
+  <img width="240" alt="Filtering a collection on a phone" src="../../docs/images/mobile-query.png" />
+</p>
+
 The token is exchanged for an opaque, `HttpOnly` session cookie and is kept in
 the server process memory only. Sessions are per process and are dropped on
 sign-out or restart, so run the server locally next to the browser that uses it

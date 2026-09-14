@@ -115,6 +115,16 @@ back to a client-side scan.
 
 ![GitDb Server filtering a collection by field value](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-query.png)
 
+The UI is responsive. On a phone the sidebar becomes a row of table chips above
+the query form, the form fields stack full width with touch-sized controls, and
+the results table scrolls sideways instead of squeezing the page.
+
+<p>
+  <img width="240" alt="Sign-in form on a phone" src="https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/mobile-sign-in.png" />
+  <img width="240" alt="Browsing a collection on a phone" src="https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/mobile-browse.png" />
+  <img width="240" alt="Filtering a collection on a phone" src="https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/mobile-query.png" />
+</p>
+
 The token is exchanged for an opaque, `HttpOnly` session cookie and only ever
 lives in the server process memory: sessions are per process and are dropped on
 sign-out or restart. Run it locally next to the browser that uses it rather than
