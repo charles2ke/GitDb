@@ -19,6 +19,7 @@ the web service and the server UI have their own requirements files.
 | [`async_quickstart.py`](async_quickstart.py) | Basic asyncio API tour. |
 | [`crud_cli.py`](crud_cli.py) | CRUD command-line client with JSON file/stdin input. |
 | [`bulk_import.py`](bulk_import.py) | Chunked CSV or JSON-lines importer with dry-run support. |
+| [`excel_sql.py`](excel_sql.py) | Import from SQL/MongoDB sources and export a collection to Excel. |
 | [`indexed_queries.py`](indexed_queries.py) | Indexed lookup versus client-side scan. |
 | [`concurrency_cas.py`](concurrency_cas.py) | Revision and batch compare-and-set handling. |
 | [`snapshots_history.py`](snapshots_history.py) | Pinned reads, history, restore, and revert guidance. |
