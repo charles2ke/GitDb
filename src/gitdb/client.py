@@ -46,10 +46,12 @@ from .documents import (
     with_metadata,
 )
 from .errors import AuthError, ConflictError, GitDbError, NotFoundError, ValidationError
+from .excel import Destination, document_rows, write_workbook, write_xlsx
 from .http import DEFAULT_API_URL, DEFAULT_RAW_URL, GitHubClient
 from .ids import new_id, validate_id, validate_name
 from .paths import PathResolver
 from .ratelimit import RateLimit
+from .sources import from_records, record_id
 
 __all__ = ["GitDb", "Collection", "Batch", "Writer", "Transaction", "TreeEntry", "Page"]
 
@@ -919,6 +921,32 @@ class GitDb:
         return Transaction(self, message, branch=branch)
 
     # ------------------------------------------------------------ maintenance
+    def export_excel(
+        self,
+        destination: Destination,
+        *,
+        collections: Optional[Sequence[str]] = None,
+        columns: Optional[Mapping[str, Sequence[str]]] = None,
+        limit: Optional[int] = None,
+    ) -> Dict[str, List[str]]:
+        """Write one worksheet per collection and return the columns per sheet.
+
+        ``collections`` defaults to every collection under ``root``. Sheet names
+        follow the collection names (sanitised and de-duplicated for Excel).
+        """
+        names = list(collections) if collections is not None else self.collections()
+        if not names:
+            raise ValidationError("no collections to export")
+        sheets = []
+        used: Dict[str, List[str]] = {}
+        for name in names:
+            documents = list(self.collection(name).all(limit=limit))
+            header, rows = document_rows(documents, (columns or {}).get(name))
+            sheets.append((name, header, rows))
+            used[name] = header
+        write_workbook(destination, sheets)
+        return used
+
     def compact(self, *, message: str = "gitdb compaction", confirm: bool = False) -> str:
         """Squash the whole branch history into a single commit.
 
@@ -1323,6 +1351,86 @@ class Collection:
     def reindex(self, *, message: Optional[str] = None) -> Optional[str]:
         """Rebuild this collection's indexes and manifest from the documents."""
         return self.db.reindex(self.name, message=message)
+
+    # ---------------------------------------------------------- import/export
+    def export_excel(
+        self,
+        destination: Destination,
+        *,
+        columns: Optional[Sequence[str]] = None,
+        limit: Optional[int] = None,
+        after: Optional[str] = None,
+        sheet_name: Optional[str] = None,
+    ) -> List[str]:
+        """Write this collection to an ``.xlsx`` workbook and return its columns.
+
+        ``destination`` is a path or a binary file object. Documents are read in
+        id order; nested values are stored as JSON text because a worksheet cell
+        holds a single scalar. No third-party library is needed.
+        """
+        documents = list(self.all(limit=limit, after=after))
+        return write_xlsx(
+            destination,
+            documents,
+            columns=columns,
+            sheet_name=sheet_name or self.name,
+        )
+
+    def import_records(
+        self,
+        records: Iterable[Mapping[str, Any]],
+        *,
+        id_field: str = "_id",
+        chunk_size: int = 100,
+        message: Optional[str] = None,
+        dry_run: bool = False,
+    ) -> int:
+        """Import ``records`` from another database and return how many were written.
+
+        ``records`` is any iterable of mappings, such as the iterators in
+        :mod:`gitdb.sources` for relational (:pep:`249`) and MongoDB-style
+        sources. Values are normalised to JSON-safe types; a record's
+        ``id_field`` becomes the document id when present, otherwise a new id is
+        generated. Documents are written ``chunk_size`` at a time, so the import
+        costs one commit per chunk instead of one per document.
+        """
+        if chunk_size < 1:
+            raise ValidationError("chunk_size must be >= 1")
+        imported = 0
+        chunk: List[Document] = []
+        for document in from_records(records):
+            chunk.append(document)
+            if len(chunk) >= chunk_size:
+                imported += self._import_chunk(chunk, id_field, message, dry_run)
+                chunk = []
+        if chunk:
+            imported += self._import_chunk(chunk, id_field, message, dry_run)
+        return imported
+
+    def _import_chunk(
+        self,
+        documents: Sequence[Document],
+        id_field: str,
+        message: Optional[str],
+        dry_run: bool,
+    ) -> int:
+        ids = [record_id(document, id_field=id_field) for document in documents]
+        for doc_id in ids:
+            if doc_id is not None:
+                validate_id(doc_id)
+        if dry_run:
+            return len(documents)
+        commit_message = message or f"import {len(documents)} records into {self.name}"
+        with self.db.batch(message=commit_message) as batch:
+            for doc_id, document in zip(ids, documents):
+                payload = dict(document)
+                # Metadata is regenerated on write, so never carry it over.
+                payload.pop("_id", None)
+                if doc_id is None:
+                    batch.insert(self.name, payload)
+                else:
+                    batch.put(self.name, doc_id, payload)
+        return len(documents)
 
     def __iter__(self) -> Iterator[Document]:
         return self.all()
