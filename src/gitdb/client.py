@@ -1425,7 +1425,8 @@ class Collection:
             for doc_id, document in zip(ids, documents):
                 payload = dict(document)
                 # Metadata is regenerated on write, so never carry it over.
-                payload.pop("_id", None)
+                for key in ("_id", "_rev", "_created_at", "_updated_at"):
+                    payload.pop(key, None)
                 if doc_id is None:
                     batch.insert(self.name, payload)
                 else:

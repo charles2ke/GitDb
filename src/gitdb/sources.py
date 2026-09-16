@@ -93,8 +93,14 @@ def _column_names(cursor: Any) -> List[str]:
     for position, column in enumerate(description):
         name = str(column[0]) if column[0] is not None else f"column_{position}"
         # Duplicate labels (``SELECT a.id, b.id``) would otherwise shadow each other.
+        # Keep incrementing the suffix until it doesn't collide with an
+        # existing (real or previously disambiguated) name.
         if name in names:
-            name = f"{name}_{position}"
+            candidate = f"{name}_{position}"
+            while candidate in names:
+                position += 1
+                candidate = f"{name}_{position}"
+            name = candidate
         names.append(name)
     return names
 

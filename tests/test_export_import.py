@@ -104,6 +104,15 @@ def test_write_workbook_sanitises_and_deduplicates_sheet_names() -> None:
     assert 'name="a b"' in workbook and 'name="a b~2"' in workbook
 
 
+def test_write_workbook_strips_control_characters_from_sheet_names() -> None:
+    buffer = io.BytesIO()
+    write_workbook(buffer, [("bad\x00name", ["x"], [[1]]), ("bad\x01name", ["x"], [[2]])])
+    with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
+        workbook = archive.read("xl/workbook.xml").decode("utf-8")
+    assert "\x00" not in workbook and "\x01" not in workbook
+    assert 'name="badname"' in workbook and 'name="badname~2"' in workbook
+
+
 def test_write_workbook_rejects_an_empty_workbook() -> None:
     with pytest.raises(ValidationError):
         write_workbook(io.BytesIO(), [])
@@ -180,6 +189,21 @@ def test_from_dbapi_accepts_mapping_rows() -> None:
 def test_from_dbapi_disambiguates_duplicate_columns(sqlite_connection: sqlite3.Connection) -> None:
     cursor = sqlite_connection.execute("SELECT id, id FROM users WHERE id = '1'")
     assert list(from_dbapi(cursor)) == [{"id": "1", "id_1": "1"}]
+
+
+def test_from_dbapi_disambiguates_columns_colliding_with_generated_suffixes() -> None:
+    class FakeCursor:
+        description = (("id_2", None), ("id", None), ("id", None))
+
+        def __init__(self) -> None:
+            self._rows: List[tuple[Any, ...]] = [("a", "b", "c")]
+
+        def fetchmany(self, size: int) -> List[tuple[Any, ...]]:
+            rows, self._rows = self._rows[:size], self._rows[size:]
+            return rows
+
+    documents = list(from_dbapi(FakeCursor()))
+    assert documents == [{"id_2": "a", "id": "b", "id_3": "c"}]
 
 
 def test_from_dbapi_requires_a_described_cursor(sqlite_connection: sqlite3.Connection) -> None:
@@ -290,6 +314,28 @@ def test_import_records_writes_one_commit_per_chunk(db: GitDb) -> None:
     assert [document["_id"] for document in written[:2]] == ["1", "2"]
     assert written[0]["score"] == "9.5"
     assert written[2]["name"] == "Katherine"
+
+
+@responses.activate
+def test_import_records_discards_stale_generated_metadata(db: GitDb) -> None:
+    register_commit_endpoints(["blobA"])
+
+    db.collection("users").import_records(
+        [
+            {
+                "_id": "1",
+                "name": "Ada",
+                "_rev": 41,
+                "_created_at": "2000-01-01T00:00:00+00:00",
+                "_updated_at": "2000-01-01T00:00:00+00:00",
+            }
+        ],
+    )
+
+    written = decode(_blob_bodies()[0]["content"])
+    assert written["_rev"] == 1
+    assert written["_created_at"] != "2000-01-01T00:00:00+00:00"
+    assert written["_updated_at"] != "2000-01-01T00:00:00+00:00"
 
 
 @responses.activate
