@@ -121,8 +121,6 @@ def test_write_workbook_strips_control_characters_from_sheet_names() -> None:
     with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
     sheet_names = re.findall(r'<sheet name="([^"]*)"', workbook)
-    control_chars = "\x00\x01\t\n\x7f\x9f"
-    assert not any(character in name for name in sheet_names for character in control_chars)
     assert sheet_names == [
         "badname",
         "badname~2",
