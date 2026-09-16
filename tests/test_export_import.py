@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+import re
 import sqlite3
 import zipfile
 from datetime import date, datetime
@@ -119,13 +120,17 @@ def test_write_workbook_strips_control_characters_from_sheet_names() -> None:
     )
     with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
-    assert not any(character in workbook for character in "\x00\x01\t\n\x7f\x9f")
-    assert 'name="badname"' in workbook
-    assert 'name="badname~2"' in workbook
-    assert 'name="badname~3"' in workbook
-    assert 'name="badname~4"' in workbook
-    assert 'name="badname~5"' in workbook
-    assert 'name="badname~6"' in workbook
+    sheet_names = re.findall(r'<sheet name="([^"]*)"', workbook)
+    control_chars = "\x00\x01\t\n\x7f\x9f"
+    assert not any(character in name for name in sheet_names for character in control_chars)
+    assert sheet_names == [
+        "badname",
+        "badname~2",
+        "badname~3",
+        "badname~4",
+        "badname~5",
+        "badname~6",
+    ]
 
 
 def test_write_workbook_rejects_an_empty_workbook() -> None:
