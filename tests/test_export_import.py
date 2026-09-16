@@ -105,7 +105,7 @@ def test_write_workbook_sanitises_and_deduplicates_sheet_names() -> None:
     assert 'name="a b"' in workbook and 'name="a b~2"' in workbook
 
 
-def test_write_workbook_strips_control_characters_from_sheet_names() -> None:
+def test_write_workbook_replaces_control_characters_in_sheet_names() -> None:
     buffer = io.BytesIO()
     write_workbook(
         buffer,
@@ -122,12 +122,12 @@ def test_write_workbook_strips_control_characters_from_sheet_names() -> None:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
     sheet_names = re.findall(r'<sheet name="([^"]*)"', workbook)
     assert sheet_names == [
-        "badname",
-        "badname~2",
-        "badname~3",
-        "badname~4",
-        "badname~5",
-        "badname~6",
+        "bad name",
+        "bad name~2",
+        "bad name~3",
+        "bad name~4",
+        "bad name~5",
+        "bad name~6",
     ]
 
 
