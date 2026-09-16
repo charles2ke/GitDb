@@ -17,9 +17,18 @@ from .errors import (
     RateLimitError,
     ValidationError,
 )
+from .excel import write_workbook, write_xlsx
 from .http import DEFAULT_API_URL, DEFAULT_RAW_URL, GitHubClient
 from .ids import new_id, new_uuid, validate_id
 from .ratelimit import RateLimit
+from .sources import (
+    from_dbapi,
+    from_mongo,
+    from_records,
+    from_sql,
+    normalize_record,
+    normalize_value,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle free type hints
     from .aio import AsyncBatch, AsyncCollection, AsyncGitDb
@@ -51,6 +60,14 @@ __all__ = [
     "RateLimitError",
     "AuthError",
     "ValidationError",
+    "write_xlsx",
+    "write_workbook",
+    "from_dbapi",
+    "from_sql",
+    "from_mongo",
+    "from_records",
+    "normalize_record",
+    "normalize_value",
     "new_id",
     "new_uuid",
     "validate_id",

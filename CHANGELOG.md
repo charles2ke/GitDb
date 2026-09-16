@@ -11,6 +11,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Runnable sample clients for CRUD, bulk imports, indexes, CAS, snapshots,
   async use, and a FastAPI service; see `examples/README.md`.
 - `GitDb.collections()` listing the collection names stored under `root`.
+- Excel export: `Collection.export_excel()` and `GitDb.export_excel()` write
+  `.xlsx` workbooks (one sheet per collection) using only the standard library.
+- Database import: `gitdb.sources` (`from_sql`, `from_dbapi`, `from_mongo`,
+  `from_records`) reads relational (PEP 249) and non-relational sources, and
+  `Collection.import_records()` writes them one commit per chunk.
 - GitDb Server (`examples/server/`): a web UI that signs in to a repository,
   lists its collections and queries them.
 

@@ -219,6 +219,7 @@ Methods:
 - `db.history(collection, id, limit=30)` → commit history for one document
 - `db.revert(commit_sha, message=None)` → forward commit undoing another commit
 - `db.reindex(collection)` → rebuild index and manifest files
+- `db.export_excel(destination, collections=None)` → `.xlsx` workbook, one sheet per collection
 - `db.compact(confirm=True)` → squash history into a single commit (**destructive**)
 - `db.rate_limit(resource="core")` → current `RateLimit` without spending quota
 - `db.invalidate(path=None)` → drop cached shas/ETags (all, or a single path)
@@ -245,6 +246,8 @@ Methods:
 | `history(id, limit=30)` | Commit history for one document |
 | `restore(id, commit_sha)` | Restore an earlier version as a new commit |
 | `reindex()` | Rebuild this collection's index/manifest files |
+| `export_excel(destination, columns=None, limit=None, sheet_name=None)` | Write the collection to an `.xlsx` workbook |
+| `import_records(records, id_field="_id", chunk_size=100, dry_run=False)` | Import mappings from another database, one commit per chunk |
 
 `insert`, `get`, `update`, `replace`, `upsert` and `delete` accept extra
 keyword arguments: `expected_rev=` for explicit compare-and-set on
@@ -418,6 +421,50 @@ To keep request counts low:
   `fetch_token` returns a token or a `(token, expires_at)` pair and is called
   again shortly before expiry. Minting is left to you, so GitDb needs no JWT
   dependency.
+
+## Excel export and database import
+
+Both directions are built on the standard library, so nothing extra is
+installed. `export_excel` writes a real `.xlsx` workbook (one worksheet per
+collection when called on the database); values that are not scalars are stored
+as JSON text because a cell holds a single value.
+
+```python
+db.collection("users").export_excel("users.xlsx")
+db.export_excel("all.xlsx", collections=["users", "notes"])
+```
+
+`gitdb.sources` reads records out of other databases and normalises the values
+JSON cannot represent (dates, decimals, `UUID`, binary columns, MongoDB
+`ObjectId`). Nothing imports a driver: you pass an already connected object, so
+any PEP 249 driver or MongoDB-style client works.
+
+```python
+import sqlite3
+from gitdb import from_sql, from_mongo
+
+users = db.collection("users")
+
+# Relational: sqlite3, psycopg, MySQL connectors, ...
+users.import_records(from_sql(sqlite3.connect("app.db"), "SELECT * FROM users"))
+
+# Non-relational: any collection exposing find()
+users.import_records(from_mongo(mongo_client.app.users), id_field="_id")
+```
+
+A record's `id_field` (default `_id`) becomes the document id; records without
+one get a generated id. Documents are written `chunk_size` at a time, so an
+import costs one commit per chunk rather than one per document, and
+`dry_run=True` validates the input without writing. See
+[`examples/excel_sql.py`](examples/excel_sql.py).
+
+| Function | Description |
+| --- | --- |
+| `from_sql(connection, query, parameters=None)` | Run a query on a PEP 249 connection, yield documents |
+| `from_dbapi(cursor, fetch_size=500)` | Walk an executed cursor in chunks |
+| `from_mongo(collection, filter=None, projection=None, limit=None)` | Read a MongoDB-style collection |
+| `from_records(records)` | Normalise any iterable of mappings |
+| `write_xlsx(destination, documents, columns=None)` | Write documents to a one-sheet workbook |
 
 ## Maintenance operations
 

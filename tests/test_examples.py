@@ -35,6 +35,7 @@ def load_example(name: str) -> ModuleType:
         "async_quickstart.py",
         "crud_cli.py",
         "bulk_import.py",
+        "excel_sql.py",
         "indexed_queries.py",
         "concurrency_cas.py",
         "snapshots_history.py",
