@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import sqlite3
 import zipfile
@@ -113,7 +114,8 @@ def test_normalize_value_converts_database_types() -> None:
     assert normalize_value(Decimal("1.50")) == "1.50"
     assert normalize_value(date(2024, 1, 2)) == "2024-01-02"
     assert normalize_value(UUID(int=1)) == "00000000-0000-0000-0000-000000000001"
-    assert normalize_value(b"bytes") == "bytes"
+    assert normalize_value(b"bytes") == base64.b64encode(b"bytes").decode("ascii")
+    assert normalize_value(b"\xff") == base64.b64encode(b"\xff").decode("ascii")
     assert normalize_value({"a": Decimal("1")}) == {"a": "1"}
     assert normalize_value([Decimal("1"), None]) == ["1", None]
     assert normalize_value(float("inf")) == "inf"

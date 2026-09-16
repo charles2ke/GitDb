@@ -15,6 +15,7 @@ object, which keeps GitDb dependency free and works with any driver.
 
 from __future__ import annotations
 
+import base64
 import uuid
 from collections.abc import Mapping, Sequence, Set
 from datetime import date, datetime, time
@@ -60,7 +61,10 @@ def normalize_value(value: Any) -> Any:
     if isinstance(value, uuid.UUID):
         return str(value)
     if isinstance(value, (bytes, bytearray, memoryview)):
-        return bytes(value).decode("utf-8", errors="replace")
+        # Binary columns are not valid UTF-8 in general, so decoding them
+        # would silently corrupt the data. Base64 is a lossless, JSON-safe
+        # representation instead.
+        return base64.b64encode(bytes(value)).decode("ascii")
     if isinstance(value, Mapping):
         return {str(key): normalize_value(item) for key, item in value.items()}
     if isinstance(value, (Sequence, Set)) and not isinstance(value, (str, bytes)):
