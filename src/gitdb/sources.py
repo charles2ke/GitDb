@@ -96,10 +96,11 @@ def _column_names(cursor: Any) -> List[str]:
         # Keep incrementing the suffix until it doesn't collide with an
         # existing (real or previously disambiguated) name.
         if name in names:
-            candidate = f"{name}_{position}"
+            suffix = position
+            candidate = f"{name}_{suffix}"
             while candidate in names:
-                position += 1
-                candidate = f"{name}_{position}"
+                suffix += 1
+                candidate = f"{name}_{suffix}"
             name = candidate
         names.append(name)
     return names

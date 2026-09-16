@@ -117,8 +117,13 @@ def _sheet_name(name: str, used: Sequence[str]) -> str:
     cleaned = "".join(" " if character in _ILLEGAL_SHEET_CHARS else character for character in name)
     # Sheet names are written as an XML attribute value, where even tab,
     # newline and carriage return are normalised to spaces on parse (unlike
-    # in element text), so strip every control character here.
-    cleaned = "".join(character for character in cleaned if character >= " ")
+    # in element text), so strip every control character here, including
+    # DEL and the C1 range that a plain ``>= " "`` check would miss.
+    cleaned = "".join(
+        character
+        for character in cleaned
+        if character >= " " and character != "\x7f" and not ("\x80" <= character <= "\x9f")
+    )
     cleaned = cleaned.strip("'").strip() or "Sheet"
     cleaned = cleaned[:_SHEET_NAME_LIMIT]
     candidate, suffix = cleaned, 2
