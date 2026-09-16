@@ -127,11 +127,11 @@ def _sheet_name(name: str, used: Sequence[str]) -> str:
         for character in name
     )
     cleaned = cleaned.strip("'").strip() or "Sheet"
-    cleaned = cleaned[:_SHEET_NAME_LIMIT]
+    cleaned = cleaned[:_SHEET_NAME_LIMIT].strip() or "Sheet"
     candidate, suffix = cleaned, 2
     while candidate.lower() in {existing.lower() for existing in used}:
         tail = f"~{suffix}"
-        candidate = cleaned[: _SHEET_NAME_LIMIT - len(tail)] + tail
+        candidate = cleaned[: _SHEET_NAME_LIMIT - len(tail)].strip() + tail
         suffix += 1
     return candidate
 

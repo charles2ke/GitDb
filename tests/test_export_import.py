@@ -105,6 +105,17 @@ def test_write_workbook_sanitises_and_deduplicates_sheet_names() -> None:
     assert 'name="a b"' in workbook and 'name="a b~2"' in workbook
 
 
+def test_write_workbook_does_not_leave_a_trailing_space_after_truncation() -> None:
+    buffer = io.BytesIO()
+    name = "a" * 30 + "\x00" + "b" * 10
+    write_workbook(buffer, [(name, ["x"], [[1]])])
+    with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
+        workbook = archive.read("xl/workbook.xml").decode("utf-8")
+    sheet_name = re.findall(r'<sheet name="([^"]*)"', workbook)[0]
+    assert sheet_name == "a" * 30
+    assert not sheet_name.endswith(" ")
+
+
 def test_write_workbook_replaces_control_characters_in_sheet_names() -> None:
     buffer = io.BytesIO()
     write_workbook(
