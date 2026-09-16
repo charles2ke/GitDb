@@ -115,11 +115,10 @@ def _column_name(index: int) -> str:
 
 def _sheet_name(name: str, used: Sequence[str]) -> str:
     cleaned = "".join(" " if character in _ILLEGAL_SHEET_CHARS else character for character in name)
-    # Control characters are as invalid in workbook.xml as they are in cell
-    # text, so strip them the same way `_escape` does for cell values.
-    cleaned = "".join(
-        character for character in cleaned if character in "\t\n\r" or character >= " "
-    )
+    # Sheet names are written as an XML attribute value, where even tab,
+    # newline and carriage return are normalised to spaces on parse (unlike
+    # in element text), so strip every control character here.
+    cleaned = "".join(character for character in cleaned if character >= " ")
     cleaned = cleaned.strip("'").strip() or "Sheet"
     cleaned = cleaned[:_SHEET_NAME_LIMIT]
     candidate, suffix = cleaned, 2

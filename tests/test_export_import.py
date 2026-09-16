@@ -106,11 +106,22 @@ def test_write_workbook_sanitises_and_deduplicates_sheet_names() -> None:
 
 def test_write_workbook_strips_control_characters_from_sheet_names() -> None:
     buffer = io.BytesIO()
-    write_workbook(buffer, [("bad\x00name", ["x"], [[1]]), ("bad\x01name", ["x"], [[2]])])
+    write_workbook(
+        buffer,
+        [
+            ("bad\x00name", ["x"], [[1]]),
+            ("bad\x01name", ["x"], [[2]]),
+            ("bad\tname", ["x"], [[3]]),
+            ("bad\nname", ["x"], [[4]]),
+        ],
+    )
     with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
-    assert "\x00" not in workbook and "\x01" not in workbook
-    assert 'name="badname"' in workbook and 'name="badname~2"' in workbook
+    assert not any(character in workbook for character in "\x00\x01\t\n")
+    assert 'name="badname"' in workbook
+    assert 'name="badname~2"' in workbook
+    assert 'name="badname~3"' in workbook
+    assert 'name="badname~4"' in workbook
 
 
 def test_write_workbook_rejects_an_empty_workbook() -> None:
