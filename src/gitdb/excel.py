@@ -113,20 +113,18 @@ def _column_name(index: int) -> str:
     return name
 
 
-def _sheet_name(name: str, used: Sequence[str]) -> str:
-    cleaned = "".join(" " if character in _ILLEGAL_SHEET_CHARS else character for character in name)
+def _is_control_character(character: str) -> bool:
     # Sheet names are written as an XML attribute value, where even tab,
     # newline and carriage return are normalised to spaces on parse (unlike
-    # in element text), so replace every control character here, including
-    # DEL and the C1 range that a plain ``>= " "`` check would miss, the same
-    # way illegal sheet characters are replaced above.
+    # in element text). DEL and the C1 range are control characters too, but
+    # a plain ``< " "`` check would miss them.
+    return character < " " or character == "\x7f" or "\x80" <= character <= "\x9f"
+
+
+def _sheet_name(name: str, used: Sequence[str]) -> str:
     cleaned = "".join(
-        (
-            character
-            if character >= " " and character != "\x7f" and not ("\x80" <= character <= "\x9f")
-            else " "
-        )
-        for character in cleaned
+        " " if character in _ILLEGAL_SHEET_CHARS or _is_control_character(character) else character
+        for character in name
     )
     cleaned = cleaned.strip("'").strip() or "Sheet"
     cleaned = cleaned[:_SHEET_NAME_LIMIT]

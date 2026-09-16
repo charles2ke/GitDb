@@ -90,19 +90,21 @@ def _column_names(cursor: Any) -> List[str]:
     if not description:
         raise ValidationError("cursor has no description; run a SELECT before importing")
     names: List[str] = []
+    seen: set[str] = set()
     for position, column in enumerate(description):
         name = str(column[0]) if column[0] is not None else f"column_{position}"
         # Duplicate labels (``SELECT a.id, b.id``) would otherwise shadow each other.
         # Keep incrementing the suffix until it doesn't collide with an
         # existing (real or previously disambiguated) name.
-        if name in names:
+        if name in seen:
             suffix = position
             candidate = f"{name}_{suffix}"
-            while candidate in names:
+            while candidate in seen:
                 suffix += 1
                 candidate = f"{name}_{suffix}"
             name = candidate
         names.append(name)
+        seen.add(name)
     return names
 
 
