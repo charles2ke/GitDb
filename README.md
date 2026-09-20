@@ -30,6 +30,7 @@ CMS-like content and demos. It is **not** a replacement for a real database; see
 
 ## Contents
 
+- [Why GitDb](#why-gitdb)
 - [Install](#install)
 - [Quickstart](#quickstart)
 - [GitDb Server](#gitdb-server)
@@ -430,16 +431,21 @@ rebuild them after direct pushes or configuration changes.
 
 ## Caching
 
-GitDb caches the blob sha, the HTTP ETag and the decoded body of every path it
-reads. Subsequent reads are sent with `If-None-Match`, so unchanged documents
-come back as `304 Not Modified` — which GitHub does not charge against the rate
-limit — and the cached body is reused. Writes update the cache with the sha
-returned by GitHub, and `db.invalidate(path=None)` drops it again.
+GitDb caches the decoded body of every path it reads, together with whatever
+validators that read produced: Contents API reads store both the blob sha and
+the HTTP ETag, while public `read_only` reads from `raw.githubusercontent.com`
+store the ETag only (no blob sha is returned), and bulk blob or GraphQL reads
+store the sha without an ETag. When a cached ETag is available the next read is
+sent with `If-None-Match`, so unchanged documents come back as `304 Not
+Modified` — which GitHub does not charge against the rate limit — and the cached
+body is reused. Writes update the cache with the sha returned by GitHub, and
+`db.invalidate(path=None)` drops it again.
 
 `cache=True` (the default) uses the in-process `MemoryCache`; `cache=False`
-disables caching (`NullCache`). Pass any object implementing the `Cache`
-interface (`get`, `set`, `delete`, `clear`) to keep validators in a disk or
-Redis store and share them across processes:
+disables caching (`NullCache`). Pass an instance of a subclass of the abstract
+`Cache` class (implementing `get`, `set`, `delete` and `clear`) to keep
+validators in a disk or Redis store and share them across processes — duck-typed
+objects that are not `Cache` subclasses are rejected with `ValidationError`:
 
 ```python
 from gitdb import GitDb, MemoryCache
