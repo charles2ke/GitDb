@@ -1,5 +1,9 @@
 # GitDb
 
+[![CI](https://github.com/charles2ke/GitDb/actions/workflows/ci.yml/badge.svg)](https://github.com/charles2ke/GitDb/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 Use a GitHub repository as a lightweight document database.
 
 GitDb stores JSON documents as files in a Git repository and talks to the GitHub
@@ -10,6 +14,38 @@ review and rollbacks for free — with no server to run.
 It is a good fit for configuration, seed data, small catalogues, feature flags,
 CMS-like content and demos. It is **not** a replacement for a real database; see
 [Limitations](#limitations).
+
+## Why GitDb
+
+- **No infrastructure.** The GitHub repository you already have *is* the
+  database; there is nothing to deploy, back up or pay for.
+- **History for free.** Every write is a commit, so you get diffs, blame,
+  `history()`, `restore()` and `revert()` without extra bookkeeping.
+- **Familiar document API.** `insert`/`get`/`update`/`upsert`/`delete`, paging,
+  batches, optional secondary indexes, and a mirrored `async` client.
+- **Reads without a token.** `read_only=True` serves public data straight from
+  `raw.githubusercontent.com`, pinned to an immutable commit.
+- **Built for the rate limit.** ETag caching, bulk blob reads, optional GraphQL
+  fetches, batching and proactive pacing keep request counts low.
+
+## Contents
+
+- [Install](#install)
+- [Quickstart](#quickstart)
+- [GitDb Server](#gitdb-server)
+- [Storage layout](#storage-layout)
+- [API reference](#api-reference)
+- [Concurrency semantics](#concurrency-semantics)
+- [Snapshots and pinned reads](#snapshots-and-pinned-reads)
+- [Indexes and manifests](#indexes-and-manifests)
+- [Caching](#caching)
+- [Rate limits](#rate-limits)
+- [Excel export and database import](#excel-export-and-database-import)
+- [Maintenance operations](#maintenance-operations)
+- [Limitations](#limitations)
+- [Development](#development)
+- [Project links](#project-links)
+- [License](#license)
 
 ## Install
 
@@ -30,6 +66,11 @@ pip install -e ".[dev]"
 ```
 
 Requires Python 3.9+ and `requests`; the async client additionally needs `httpx`.
+
+Writes need a token with **Contents: Read and write** on the data repository
+(classic tokens: the `repo` scope); reads of a private repository need
+**Contents: Read**. Public repositories can be read with no token at all — see
+[`read_only`](#gitdbrepo-tokennone-options).
 
 ## Quickstart
 
@@ -385,6 +426,29 @@ Both are opt-in per collection because they cause write amplification: every
 write to an indexed collection also rewrites the index. Use `reindex()` to
 rebuild them after direct pushes or configuration changes.
 
+## Caching
+
+GitDb caches the blob sha, the HTTP ETag and the decoded body of every path it
+reads. Subsequent reads are sent with `If-None-Match`, so unchanged documents
+come back as `304 Not Modified` — which GitHub does not charge against the rate
+limit — and the cached body is reused. Writes update the cache with the sha
+returned by GitHub, and `db.invalidate(path=None)` drops it again.
+
+`cache=True` (the default) uses the in-process `MemoryCache`; `cache=False`
+disables caching (`NullCache`). Pass any object implementing the `Cache`
+interface (`get`, `set`, `delete`, `clear`) to keep validators in a disk or
+Redis store and share them across processes:
+
+```python
+from gitdb import GitDb, MemoryCache
+
+db = GitDb(repo="owner/name", token=token, cache=MemoryCache())
+db.invalidate("data/users/ada.json")  # or db.invalidate() for everything
+```
+
+Snapshots and pinned views keep their own cache; reads pinned to a commit sha
+are immutable and therefore always safe to cache.
+
 ## Rate limits
 
 Authenticated requests get 5,000 requests/hour on github.com. GitDb inspects
@@ -512,6 +576,15 @@ pytest -q
 
 Tests mock every HTTP call with `responses` (and `respx` for the async client);
 the suite never touches the network.
+
+## Project links
+
+- [Examples guide](examples/README.md) — runnable CLI, import, index, snapshot,
+  async and web-service samples
+- [GitDb Server](site/README.md) — the hosted browser UI
+  (<https://charles2ke.github.io/GitDb/>)
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)
 
 ## License
 
