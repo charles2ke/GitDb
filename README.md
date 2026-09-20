@@ -49,17 +49,19 @@ CMS-like content and demos. It is **not** a replacement for a real database; see
 
 ## Install
 
+`gitdb-py` is not published on PyPI yet, so install it from this repository:
+
 ```bash
-pip install gitdb-py
+pip install "git+https://github.com/charles2ke/GitDb.git"
 ```
 
 With the asyncio client:
 
 ```bash
-pip install "gitdb-py[async]"
+pip install "gitdb-py[async] @ git+https://github.com/charles2ke/GitDb.git"
 ```
 
-From source:
+From a local clone (editable, with the development extras):
 
 ```bash
 pip install -e ".[dev]"
