@@ -30,7 +30,16 @@ repository layout through the GitHub REST API:
 The token is held in a JavaScript variable for the lifetime of the tab: it is
 never written to storage, never added to the URL, and only sent to
 `api.github.com`. Reloading or signing out drops it. Public repositories work
-without a token, subject to GitHub's unauthenticated rate limit.
+without a token, subject to GitHub's unauthenticated rate limit. The repository,
+branch and data root — none of them secret — are remembered in `localStorage`
+and prefilled on the next visit.
+
+Small things the page does to stay pleasant to use: the sign-in and query
+buttons disable themselves while a request is in flight (a scan over an
+unindexed field can take a while), focus moves to the query form once you are
+signed in, an empty result explains itself instead of leaving a blank table,
+long cell values are shown in full on hover, and status messages sit in an
+`aria-live` region so screen readers announce them.
 
 Deployment is handled by [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)
 on every push to `main` that touches `site/`. Pages must be configured once with

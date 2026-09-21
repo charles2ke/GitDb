@@ -46,7 +46,14 @@ results table scrolls sideways.
 The token is exchanged for an opaque, `HttpOnly` session cookie and is kept in
 the server process memory only. Sessions are per process and are dropped on
 sign-out or restart, so run the server locally next to the browser that uses it
-rather than exposing it to a network.
+rather than exposing it to a network. The repository, branch and data root are
+remembered in the browser's `localStorage` and prefilled on the next visit; the
+token never is.
+
+While a request is in flight the button that started it is disabled, an empty
+result explains itself instead of leaving a blank table, long cell values are
+shown in full on hover, focus moves to the query form after sign-in, and status
+messages sit in an `aria-live` region.
 
 ## HTTP API
 

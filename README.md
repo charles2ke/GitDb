@@ -15,6 +15,18 @@ It is a good fit for configuration, seed data, small catalogues, feature flags,
 CMS-like content and demos. It is **not** a replacement for a real database; see
 [Limitations](#limitations).
 
+Browse a repository without installing anything at
+**<https://charles2ke.github.io/GitDb/>** — see [GitDb Server](#gitdb-server).
+
+## Is it a fit?
+
+| Works well | Look elsewhere |
+| --- | --- |
+| Configuration, feature flags, seed data | High write throughput: a branch ref serializes writes |
+| Small catalogues, CMS-like content, demos | Large datasets: keep a repository below ~1 GB |
+| Data that benefits from review and history | Joins, aggregations or server-side sorting |
+| Read-mostly workloads behind a cache | Low-latency or multi-document transactional work |
+
 ## Why GitDb
 
 - **No infrastructure.** The GitHub repository you already have *is* the
@@ -30,6 +42,7 @@ CMS-like content and demos. It is **not** a replacement for a real database; see
 
 ## Contents
 
+- [Is it a fit?](#is-it-a-fit)
 - [Why GitDb](#why-gitdb)
 - [Install](#install)
 - [Quickstart](#quickstart)
@@ -149,15 +162,23 @@ default) and the data root holding the collections (`data` by default).
 
 The sidebar lists every collection under the data root; the derived `_index` and
 `_manifest` directories are hidden. Selecting one runs a query and renders the
-documents as a table, with `_id`, `_rev` and `_updated_at` first.
+documents as a table, with `_id`, `_rev` and `_updated_at` first. Long values are
+clipped to keep the table readable and shown in full on hover.
 
 ![GitDb Server listing the documents of a collection](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-browse.png)
 
 The query form filters by field value and caps how many documents come back
 (500 at most). Indexed fields are served from the index, any other field falls
-back to a client-side scan.
+back to a client-side scan. While a query runs the button is disabled so a slow
+scan cannot be started twice, and an empty result says so instead of leaving a
+blank table.
 
 ![GitDb Server filtering a collection by field value](https://raw.githubusercontent.com/charles2ke/GitDb/main/docs/images/server-query.png)
+
+The repository, branch and data root are remembered in the browser's
+`localStorage` and prefilled on the next visit; **the token never is**. After
+signing in, focus moves to the query form, and status messages are announced to
+screen readers.
 
 The UI is responsive. On a phone the sidebar becomes a row of table chips above
 the query form, the form fields stack full width with touch-sized controls, and
