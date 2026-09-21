@@ -19,6 +19,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - GitDb Server (`examples/server/`): a web UI that signs in to a repository,
   lists its collections and queries them.
 
+### Changed
+
+- GitDb Server UX: the repository, branch and data root are remembered in the
+  browser (never the token), buttons disable themselves while a request runs,
+  empty results are explained instead of showing a blank table, clipped cell
+  values are readable on hover, focus moves to the query form after sign-in,
+  and status messages are announced through an `aria-live` region.
+
 ### Planned
 
 - Async `Writer`/`Transaction` twins.

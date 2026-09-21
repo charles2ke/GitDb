@@ -38,7 +38,10 @@
       th { background: rgba(127, 127, 127, .12); white-space: nowrap; }
       .status { margin-top: .75rem; }
       .error { color: #cf222e; }
+      .empty { margin-top: 1rem; color: #57606a; }
       .hidden { display: none !important; }
+      button[disabled] { opacity: .6; cursor: progress; }
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       #login { max-width: 26rem; margin: 3rem auto; display: block; padding: 0 1rem; }
       #login label { margin-bottom: .5rem; }
       #login input { width: 100%; }
@@ -69,16 +72,18 @@
     </header>
 
     <form id="login">
-      <label>Repository <input name="repo" placeholder="owner/name" required /></label>
-      <label>Token <input name="token" type="password" placeholder="github_pat_... (optional for public repositories)" /></label>
-      <label>Branch <input name="branch" value="main" /></label>
-      <label>Data root <input name="root" value="data" /></label>
+      <label>Repository <input name="repo" placeholder="owner/name" required autocomplete="off" /></label>
+      <label>Token <input name="token" type="password" placeholder="github_pat_... (optional for public repositories)" autocomplete="off" /></label>
+      <label>Branch <input name="branch" value="main" autocomplete="off" /></label>
+      <label>Data root <input name="root" value="data" autocomplete="off" /></label>
       <button class="primary" type="submit">Sign in</button>
-      <p id="login-status" class="status"></p>
+      <p id="login-status" class="status" role="status" aria-live="polite"></p>
       <p class="note">
         This page runs entirely in your browser and talks to the GitHub REST API
         directly. The token is kept in memory for this tab only: it is never
-        stored and never sent anywhere but api.github.com.
+        stored and never sent anywhere but api.github.com. The repository,
+        branch and data root are remembered in this browser so you do not have
+        to retype them.
       </p>
     </form>
 
@@ -89,13 +94,14 @@
       </nav>
       <section>
         <form id="query">
-          <label>Table <input name="collection" required /></label>
-          <label>Field <input name="field" placeholder="(all documents)" /></label>
-          <label>Equals <input name="value" /></label>
+          <label>Table <input name="collection" required autocomplete="off" /></label>
+          <label>Field <input name="field" placeholder="(all documents)" autocomplete="off" /></label>
+          <label>Equals <input name="value" autocomplete="off" /></label>
           <label>Limit <input name="limit" type="number" value="50" min="1" max="500" /></label>
           <button class="primary" type="submit">Run query</button>
         </form>
-        <p id="query-status" class="status"></p>
+        <p id="query-status" class="status" role="status" aria-live="polite"></p>
+        <p id="query-empty" class="empty hidden"></p>
         <div class="table-wrap"><table id="results"></table></div>
       </section>
     </main>
@@ -112,8 +118,14 @@
       /** Directories holding derived files rather than collections. */
       const DERIVED = ["_index", "_manifest"];
 
+      /** localStorage key for the non-secret connection settings. */
+      const SETTINGS_KEY = "gitdb-server.connection";
+
       /** The signed-in session; credentials never leave this object. */
       let session = null;
+
+      /** True while a query is in flight, so clicks cannot pile up. */
+      let querying = false;
 
       class GitHubError extends Error {
         constructor(message, status) {
@@ -252,6 +264,31 @@
         element.classList.toggle("error", Boolean(isError));
       }
 
+      /** Disable a form while it is working, so a click cannot be repeated. */
+      function busy(form, isBusy, label) {
+        const button = form.querySelector("button.primary");
+        button.disabled = isBusy;
+        button.textContent = isBusy ? label.busy : label.idle;
+        form.setAttribute("aria-busy", String(isBusy));
+      }
+
+      /** Non-secret connection settings, remembered between visits. */
+      function loadSettings() {
+        try {
+          return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
+        } catch {
+          return {};
+        }
+      }
+
+      function saveSettings({ repo, branch, root }) {
+        try {
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify({ repo, branch, root }));
+        } catch {
+          /* Private browsing or a full quota: remembering is best effort. */
+        }
+      }
+
       function showCollections(names) {
         const container = $("#collections");
         container.replaceChildren();
@@ -279,6 +316,8 @@
           value === undefined ? "" : typeof value === "object" && value !== null
             ? JSON.stringify(value)
             : String(value);
+        /* Cells are clipped to keep the table readable; show the full value on hover. */
+        if (element.textContent) element.title = element.textContent;
         return element;
       }
 
@@ -304,10 +343,14 @@
       async function runQuery() {
         const form = $("#query");
         const status = $("#query-status");
+        const empty = $("#query-empty");
         const collection = form.collection.value.trim();
         const field = form.field.value.trim();
         const limit = boundedLimit(form.limit.value);
-        if (!collection) return;
+        if (!collection || querying) return;
+        querying = true;
+        busy(form, true, { idle: "Run query", busy: "Running..." });
+        empty.classList.add("hidden");
         say(status, "Running query...", false);
         try {
           const documents = field
@@ -315,6 +358,16 @@
             : await readDocuments((await listEntries(collection)).slice(0, limit));
           showResults(columnsOf(documents), documents);
           say(status, `${documents.length} document(s) in ${collection}.`, false);
+          if (!documents.length) {
+            say(
+              empty,
+              field
+                ? `No document in ${collection} has ${field} equal to that value.`
+                : `${collection} has no documents yet.`,
+              false,
+            );
+            empty.classList.remove("hidden");
+          }
           for (const button of $("#collections").children) {
             if (button.tagName === "BUTTON") {
               button.setAttribute("aria-current", String(button.textContent === collection));
@@ -323,6 +376,9 @@
         } catch (error) {
           $("#results").replaceChildren();
           say(status, error.message, true);
+        } finally {
+          querying = false;
+          busy(form, false, { idle: "Run query", busy: "Running..." });
         }
       }
 
@@ -332,6 +388,7 @@
         $("#workspace").classList.remove("hidden");
         $("#logout").classList.remove("hidden");
         showCollections(collections);
+        $("#query").collection.focus();
       }
 
       $("#login").addEventListener("submit", async (event) => {
@@ -340,6 +397,7 @@
         const repo = form.repo.value.trim();
         if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) {
           say($("#login-status"), "repository must look like owner/name", true);
+          form.repo.focus();
           return;
         }
         session = {
@@ -348,15 +406,19 @@
           branch: form.branch.value.trim() || "main",
           root: form.root.value.trim().replace(/^\/+|\/+$/g, "") || "data",
         };
+        busy(form, true, { idle: "Sign in", busy: "Signing in..." });
         say($("#login-status"), "Signing in...", false);
         try {
           const collections = await listCollections();
           form.token.value = "";
           say($("#login-status"), "", false);
+          saveSettings(session);
           connected(collections);
         } catch (error) {
           session = null;
           say($("#login-status"), error.message, true);
+        } finally {
+          busy(form, false, { idle: "Sign in", busy: "Signing in..." });
         }
       });
 
@@ -369,6 +431,14 @@
         event.preventDefault();
         runQuery();
       });
+
+      /* Prefill the remembered repository, branch and data root (never a token). */
+      const remembered = loadSettings();
+      const loginForm = $("#login");
+      for (const field of ["repo", "branch", "root"]) {
+        if (remembered[field]) loginForm[field].value = remembered[field];
+      }
+      loginForm.repo.focus();
     </script>
   </body>
 </html>
